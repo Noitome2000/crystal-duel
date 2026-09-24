@@ -8,7 +8,7 @@
   let opponent='ai',aiBusy=false,aiTimer=null,aiEpoch=0,aiError=false,wheelOpen=true,wheelDismissed=false;
   const positionHistory=[];
 
-  let scene,camera,renderer,world,tileGroup,unitGroup,overlay,pathGroup,particles;
+  let scene,camera,renderer,world,tileGroup,unitGroup,overlay,pathGroup,particles,statusEffects;
   const meshes=new Map(),tileMeshes=[],tweens=[];
   const touchUI=matchMedia('(pointer: coarse)');
   const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -62,7 +62,7 @@
   function boot(){
     scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(36,1,.1,100);
     renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.25;$('scene').appendChild(renderer.domElement);
-    world=new THREE.Group();scene.add(world);[tileGroup,unitGroup,overlay,pathGroup,particles]=Array.from({length:5},()=>{const g=new THREE.Group();world.add(g);return g;});
+    world=new THREE.Group();scene.add(world);[tileGroup,unitGroup,overlay,pathGroup,particles,statusEffects]=Array.from({length:6},()=>{const g=new THREE.Group();world.add(g);return g;});
     scene.add(new THREE.HemisphereLight(0xd7eee1,0x33463a,2));
     const sun=new THREE.DirectionalLight(0xffe0ad,3.4);sun.position.set(-2,9,4);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);sun.shadow.camera.left=-8;sun.shadow.camera.right=8;sun.shadow.camera.top=8;sun.shadow.camera.bottom=-8;sun.shadow.normalBias=.025;scene.add(sun);
     const fill=new THREE.DirectionalLight(0x87c7dd,1.5);fill.position.set(5,4,-4);scene.add(fill);makeBoard();syncUnits();
@@ -91,7 +91,7 @@
   function updateCamera(){const t=vec(2.5,1.5,.05),r=orbit.radius*Math.max(1,1.25/camera.aspect);camera.position.set(t.x+r*Math.sin(orbit.yaw)*Math.cos(orbit.pitch),r*Math.sin(orbit.pitch),t.z+r*Math.cos(orbit.yaw)*Math.cos(orbit.pitch));camera.lookAt(t);camera.updateMatrixWorld(true);}
   function resetCamera(){Object.assign(orbit,{yaw:-.12,pitch:.96,radius:9});updateCamera();}
   function syncUnits(){for(const [id,g] of meshes)if(!R.get(state,id)?.alive){unitGroup.remove(g);dispose(g);meshes.delete(id);}for(const u of state.units.filter(u=>u.alive)){if(!meshes.has(u.id)){const m=makeUnit(u);meshes.set(u.id,m);unitGroup.add(m);}const g=meshes.get(u.id);g.position.copy(vec(u.x,u.y));g.scale.setScalar(1);}}
-  function frame(now){requestAnimationFrame(frame);for(let i=tweens.length-1;i>=0;i--){const t=tweens[i],p=Math.max(0,Math.min(1,(now-t.start)/t.duration));try{t.step(p);}catch(error){tweens.splice(i,1);t.fail(error);continue;}if(p===1){tweens.splice(i,1);t.done();}}overlay.children.forEach(o=>{if(o.userData.pulse)o.material.opacity=.60+(reduced?0:Math.sin(now*.004)*.10);});renderer.render(scene,camera);positionWheel();}
+  function frame(now){requestAnimationFrame(frame);for(let i=tweens.length-1;i>=0;i--){const t=tweens[i],p=Math.max(0,Math.min(1,(now-t.start)/t.duration));try{t.step(p);}catch(error){tweens.splice(i,1);t.fail(error);continue;}if(p===1){tweens.splice(i,1);t.done();}}overlay.children.forEach(o=>{if(o.userData.pulse)o.material.opacity=.60+(reduced?0:Math.sin(now*.004)*.10);});animateStatuses(now);renderer.render(scene,camera);positionWheel();}
   function tween(duration,step){return new Promise((done,fail)=>tweens.push({start:performance.now(),duration:reduced?1:duration,step,done,fail}));}
   function legalMode(id,m){return m==='auto'?[...R.legal(state,id,'move'),...R.legal(state,id,'attack')]:R.legal(state,id,m);}
   function options(){return selected?legalMode(selected,mode).filter(o=>mode!=='skill'||!skillKind||o.kind===skillKind):[];}
@@ -116,10 +116,62 @@
   function ghost(g,opacity=.32){
     const copy=g.clone(true);copy.traverse(o=>{if(o.isSprite)o.visible=false;if(o.geometry)o.geometry=o.geometry.clone();if(o.material){o.material=o.material.clone();o.material.map=null;o.material.transparent=true;o.material.opacity=opacity;o.material.depthWrite=false;}});particles.add(copy);return copy;
   }
+  const skillColors={推进:0xffc478,军号:0xffd783,设陷:0xb993ff,陷阵:0xffb16e,斩将:0xff715e,瞬移:0xbda1ff,短兵:0xd2b9ff,瞬闪:0x76edda,游击:0x76edda,武库:0xe4cf92,移形:0xc19bff,轰炸:0xff8652,'轰炸·蓄力':0xffb85c,神速:0x8ee5ff,荣耀:0x9feaff,残忍:0xff6b73};
+  function effectRing(group,x,y,color,radius=.4){const m=add(group,new THREE.TorusGeometry(radius,.018,6,48),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.8,depthWrite:false}),x,.15,y);m.rotation.x=Math.PI/2;return m;}
   async function skillBurst(id,name){
     const g=meshes.get(id);if(!g||!name)return;
-    const echoes=Array.from({length:6},()=>ghost(g)),title=label(name,'#fff0ae',.38);title.position.copy(g.position).add(new THREE.Vector3(0,1.45,0));particles.add(title);
-    await tween(430,t=>{echoes.forEach((e,i)=>{e.position.copy(g.position).add(new THREE.Vector3(Math.cos(i*Math.PI/3)*t*.48,t*.08,Math.sin(i*Math.PI/3)*t*.48));e.traverse(o=>{if(o.material)o.material.opacity=(1-t)*.4;});});title.position.y=g.position.y+1.45+t*.18;});clear(particles);
+    // Every cast owns its resources, including concurrent dodge / attacker animations.
+    const fx=new THREE.Group();world.add(fx);fx.userData.effect='skill:'+name;
+    const color=skillColors[name]||0xffd783,echoes=[];
+    for(let i=0;i<(reduced?0:4);i++){const copy=ghost(g,.3);particles.remove(copy);fx.add(copy);echoes.push(copy);}
+    const ring=effectRing(fx,g.position.x,g.position.z,color),outer=effectRing(fx,g.position.x,g.position.z,color,.55);
+    const title=label(name,'#'+color.toString(16).padStart(6,'0'),.30);title.position.copy(g.position).add(new THREE.Vector3(0,1.25,0));fx.add(title);
+    const motes=[];for(let i=0;i<(reduced?0:10);i++)motes.push(add(fx,new THREE.OctahedronGeometry(.035),new THREE.MeshBasicMaterial({color,transparent:true,depthWrite:false}),g.position.x,.2,g.position.z));
+    try{await tween(380,t=>{
+      echoes.forEach((e,i)=>{const angle=i*Math.PI/2;e.position.copy(g.position).add(new THREE.Vector3(Math.cos(angle)*t*.35,t*.08,Math.sin(angle)*t*.35));e.traverse(o=>{if(o.material)o.material.opacity=(1-t)*.3;});});
+      ring.scale.setScalar(1+t*.8);outer.scale.setScalar(1+t*.5);ring.material.opacity=outer.material.opacity=(1-t)*.8;title.position.y=g.position.y+1.25+t*.15;
+      motes.forEach((m,i)=>{const angle=i*Math.PI/5+t*2,r=.28+t*.25;m.position.set(g.position.x+Math.cos(angle)*r,.2+Math.sin(Math.PI*t)*.65,g.position.z+Math.sin(angle)*r);m.material.opacity=1-t;});
+    });}finally{world.remove(fx);dispose(fx);}
+  }
+  async function skillResolution(before,result,actor){
+    const kind=result.kind,opt=result.opt,color=skillColors[skillNames[kind]]||0xffd783;
+    if(!['push','speed','vault','teleport','swap','charge','bomb','retreat'].includes(kind))return;
+    const fx=new THREE.Group();world.add(fx);fx.userData.effect='resolve:'+kind;
+    const atBefore=id=>before.find(u=>u.id===id),atAfter=id=>R.get(state,id),rings=[],links=[];
+    const ringAt=u=>{if(u)rings.push(effectRing(fx,u.x,u.y,color,kind==='bomb'?.5:.32));};
+    const link=(a,b)=>{if(!a||!b)return;const curve=new THREE.QuadraticBezierCurve3(vec(a.x,a.y,.22),vec((a.x+b.x)/2,(a.y+b.y)/2,.9),vec(b.x,b.y,.22));const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(28)),new THREE.LineBasicMaterial({color,transparent:true,opacity:.9,depthWrite:false}));fx.add(line);links.push(line);};
+    if(kind==='swap'){for(const id of [opt.a,opt.b]){ringAt(atBefore(id));link(atBefore(id),atAfter(id));}}
+    else if(kind==='push'){ringAt(atAfter(opt.target));link(atBefore(opt.target),atAfter(opt.target));}
+    else{ringAt(actor);ringAt(atAfter(actor?.id));link(actor,atAfter(actor?.id));}
+    if(kind==='bomb')for(const c of R.CELLS.filter(c=>Math.abs(c.x-opt.x)<=1&&Math.abs(c.y-opt.y)<=1))ringAt(c);
+    if(opt.source&&opt.source!==actor?.id)link(atBefore(opt.source),actor);
+    try{await tween(kind==='bomb'?430:250,t=>{rings.forEach((r,i)=>{r.scale.setScalar(1+t*(kind==='bomb'?1.6:.6));r.material.opacity=(1-t)*.9;r.rotation.z=t*(i%2?1:-1);});links.forEach(l=>l.material.opacity=1-t);});}finally{world.remove(fx);dispose(fx);}
+  }
+  function statusSnapshot(s){
+    const out=[];if(s.winner)return out;
+    for(const u of s.units.filter(u=>u.alive)){
+      if(R.trapped(s,u)){const source=s.units.find(e=>e.alive&&e.side!==u.side&&e.hero==='strategist'&&((e.x===u.x&&Math.abs(e.y-u.y)===2)||(e.y===u.y&&Math.abs(e.x-u.x)===2)));out.push({key:'trap:'+u.id,kind:'trap',unit:u,source,name:'设陷',color:0xb993ff});}
+      if(u.type==='soldier'&&u.id===selected){for(const h of ['general','knight']){const source=s.units.find(e=>e.alive&&e.side===u.side&&e.hero===h&&R.near(e,u)&&R.ready(s,e));if(source&&(h==='knight'||!R.protectedOpening(s)))out.push({key:h+':'+u.id,kind:'support',unit:u,source,name:h==='knight'?'神速共享':'推进共享',color:h==='knight'?0x8ee5ff:0xffd783});}}
+      if(u.charged)out.push({key:'charge:'+u.id,kind:'charge',unit:u,name:'蓄力',color:0xffaa55});
+      if((u.swapImmuneUntil||0)>s.ply)out.push({key:'ward:'+u.id,kind:'ward',unit:u,name:'移形保护',color:0xc19bff});
+      if((u.pushImmuneUntil||0)>s.ply)out.push({key:'push:'+u.id,kind:'ward',unit:u,name:'禁止反推',color:0xffc478});
+    }return out;
+  }
+  function refreshStatuses(){
+    if(!statusEffects)return;clear(statusEffects);
+    for(const effect of statusSnapshot(state)){
+      const g=new THREE.Group();g.userData={effect:'status:'+effect.kind,id:effect.unit.id};statusEffects.add(g);
+      const ring=effectRing(g,0,0,effect.color,effect.kind==='charge'?.40:.35);ring.userData.rotate=true;
+      if(effect.kind==='trap')for(let i=0;i<4;i++){const a=i*Math.PI/2;add(g,new THREE.BoxGeometry(.025,.40,.025),new THREE.MeshBasicMaterial({color:effect.color,transparent:true,opacity:.5}),Math.cos(a)*.31,.3,Math.sin(a)*.31);}
+      if(effect.kind==='charge'){const core=add(g,new THREE.OctahedronGeometry(.085),new THREE.MeshBasicMaterial({color:effect.color,transparent:true,opacity:.8}),0,1.35,0);core.userData.rotate=true;}
+      const tag=label(effect.name,'#'+effect.color.toString(16),.15);const row=statusEffects.children.filter(e=>e.userData.id===effect.unit.id).length-1;tag.position.set(0,.2+row*.17,.42);g.add(tag);
+    }animateStatuses(performance.now());
+  }
+  function animateStatuses(now){if(!statusEffects)return;for(const g of statusEffects.children){const mesh=meshes.get(g.userData.id);if(!mesh){g.visible=false;continue;}g.visible=true;g.position.set(mesh.position.x,0,mesh.position.z);for(const m of g.children)if(m.userData.rotate&&!reduced)m.rotation.z=now*.0007;}}
+  async function statusTransitions(previous){
+    const old=new Set(statusSnapshot(previous).map(e=>e.key));
+    for(const effect of statusSnapshot(state).filter(e=>!old.has(e.key)&&e.kind==='trap')){await skillBurst(effect.source.id,'设陷');const fx=new THREE.Group();world.add(fx);fx.userData.effect='trap-bind';const ring=effectRing(fx,effect.unit.x,effect.unit.y,effect.color,.7);try{await tween(270,t=>{ring.scale.setScalar(1-t*.5);ring.material.opacity=.3+t*.6;});}finally{world.remove(fx);dispose(fx);}}
+    refreshStatuses();
   }
   function follow(g,path,t){const d=Math.max(0,Math.min(1,t))*(path.length-1),i=Math.min(Math.floor(d),path.length-2);g.position.lerpVectors(vec(path[i].x,path[i].y),vec(path[i+1].x,path[i+1].y),d-i);}
   async function animateDodge(before,result){
@@ -168,7 +220,7 @@
     if(result.kind==='attack')await tween(280,()=>{});
     const duration=result.kind==='bomb'?850:Math.max(480,(opt?.path?.length||2)*230);
     let trailTick=-1;
-    await tween(duration,t=>{if(result.kind==='attack'&&!reduced&&Math.floor(t*16)!==trailTick){trailTick=Math.floor(t*16);for(const u of moving){const g=meshes.get(u.id);if(g)ghost(g,.16);}}const eased=result.kind==='attack'?.90*(t*t*(3-2*t)):t*t*(3-2*t);for(const u of moving){const g=meshes.get(u.id),b=before.find(b=>b.id===u.id);if(!g)continue;const p=opt?.path?.length&&opt.path[0].x===b.x&&opt.path[0].y===b.y?opt.path:[b,u];if(jump){g.position.lerpVectors(vec(b.x,b.y),vec(u.x,u.y),eased);g.position.y+=Math.sin(Math.PI*t)*.75;}else{const d=eased*(p.length-1),i=Math.min(Math.floor(d),p.length-2);g.position.lerpVectors(vec(p[i].x,p[i].y),vec(p[i+1].x,p[i+1].y),d-i);g.position.y+=Math.sin(t*Math.PI)*.07;}}});
+    await tween(duration,t=>{if(['attack','speed','retreat','vault','teleport'].includes(result.kind)&&!reduced&&Math.floor(t*16)!==trailTick){trailTick=Math.floor(t*16);for(const u of moving){const g=meshes.get(u.id);if(g)ghost(g,.16);}}const eased=result.kind==='attack'?.90*(t*t*(3-2*t)):t*t*(3-2*t);for(const u of moving){const g=meshes.get(u.id),b=before.find(b=>b.id===u.id);if(!g)continue;const p=opt?.path?.length&&opt.path[0].x===b.x&&opt.path[0].y===b.y?opt.path:[b,u];if(result.kind==='teleport'){const fade=t<.5?1-t*2:(t-.5)*2;g.position.copy(t<.5?vec(b.x,b.y):vec(u.x,u.y));g.scale.setScalar(Math.max(.02,fade));}else if(result.kind==='swap'){g.position.lerpVectors(vec(b.x,b.y),vec(u.x,u.y),eased);const sign=u.id===opt.a?1:-1;g.position.x+=Math.sin(Math.PI*t)*.18*sign;g.position.y+=Math.sin(Math.PI*t)*.4;}else if(jump){g.position.lerpVectors(vec(b.x,b.y),vec(u.x,u.y),eased);g.position.y+=Math.sin(Math.PI*t)*.75;}else{const d=eased*(p.length-1),i=Math.min(Math.floor(d),p.length-2);g.position.lerpVectors(vec(p[i].x,p[i].y),vec(p[i+1].x,p[i+1].y),d-i);g.position.y+=Math.sin(t*Math.PI)*.07;}}});
     clear(particles);
     if(result.kind==='attack'&&dead.length)await captureImpact(actor,dead[0],opt);
     else if(dead.length||result.kind==='bomb'){
@@ -176,14 +228,15 @@
       for(const c of bursts)for(let i=0;i<(reduced?0:12);i++){const m=add(particles,new THREE.IcosahedronGeometry(.045),new THREE.MeshBasicMaterial({color:0xe7c987,transparent:true}),c.x,.4,c.y);m.userData={origin:m.position.clone(),angle:i*Math.PI/6,speed:.35+Math.random()*.4};}
       await tween(330,t=>{for(const b of dead){const g=meshes.get(b.id);if(g)g.scale.setScalar(Math.max(.001,1-t));}particles.children.forEach(p=>{const d=p.userData;p.position.copy(d.origin).add(new THREE.Vector3(Math.cos(d.angle)*t*d.speed,Math.sin(t*Math.PI)*.45,Math.sin(d.angle)*t*d.speed));p.material.opacity=1-t;});});clear(particles);
     }
+    await skillResolution(before,result,actor);
     if(pathGroup)clear(pathGroup);syncUnits();
   }
-  async function perform(opt,byAI=false){if(locked||(!byAI&&isAITurn()))return;const before=state.units.map(u=>({...u})),oldPly=state.ply;locked=true;setDisabled();try{const result=R.apply(state,selected,mode==='auto'?(opt.kind==='attack'?'attack':'move'):mode,opt);await animateResult(before,result);if(result.kind!=='reaction'&&!R.protectedOpening(state)){for(const strategist of state.units.filter(u=>u.alive&&u.hero==='strategist')){const affected=state.units.some(u=>u.alive&&u.side!==strategist.side&&((u.x===strategist.x&&Math.abs(u.y-strategist.y)===2)||(u.y===strategist.y&&Math.abs(u.x-strategist.x)===2))&&!R.trapped({...state,units:before},before.find(b=>b.id===u.id)));if(affected)await skillBurst(strategist.id,'设陷');}}adoptPhase();}catch(e){console.error(e);clear(particles);clear(pathGroup);world.position.set(0,0,0);syncUnits();adoptPhase();toast('动画已恢复：'+e.message);}finally{locked=false;renderUI();if(state.ply!==oldPly)flashTurn();showWin();rememberPosition();scheduleAI();}}
+  async function perform(opt,byAI=false){if(locked||(!byAI&&isAITurn()))return;const previous={...state,units:state.units.map(u=>({...u}))},before=previous.units,oldPly=state.ply;locked=true;setDisabled();try{const result=R.apply(state,selected,mode==='auto'?(opt.kind==='attack'?'attack':'move'):mode,opt);await animateResult(before,result);if(result.kind!=='reaction')await statusTransitions(previous);adoptPhase();}catch(e){console.error(e);clear(particles);clear(pathGroup);world.position.set(0,0,0);syncUnits();adoptPhase();toast('已恢复对局，请继续行动。');}finally{locked=false;renderUI();if(state.ply!==oldPly)flashTurn();showWin();rememberPosition();scheduleAI();}}
   function adoptPhase(){skillKind=null;wheelOpen=true;wheelDismissed=false;if(state.phase==='dodge'){selected=state.pending.target;mode='auto';}else if(state.actor){selected=state.actor;mode=state.phase==='bomb'?'skill':'auto';}else{selected=null;mode='auto';}}
-  async function finishChoice(byAI=false){if(locked||(!byAI&&isAITurn()))return;const before=state.units.map(u=>({...u})),oldPly=state.ply,p=state.pending;locked=true;setDisabled();try{if(state.phase==='normal')R.pass(state);else R.decline(state);if(p)await animateResult(before,{kind:'attack',opt:p.opt,actor:p.actor});adoptPhase();}catch(e){console.error(e);clear(particles);clear(pathGroup);world.position.set(0,0,0);syncUnits();adoptPhase();toast('动画已恢复：'+e.message);}finally{locked=false;renderUI();if(state.ply!==oldPly)flashTurn();showWin();rememberPosition();scheduleAI();}}
+  async function finishChoice(byAI=false){if(locked||(!byAI&&isAITurn()))return;const previous={...state,units:state.units.map(u=>({...u}))},before=previous.units,oldPly=state.ply,p=state.pending;locked=true;setDisabled();try{if(state.phase==='normal')R.pass(state);else R.decline(state);if(p)await animateResult(before,{kind:'attack',opt:p.opt,actor:p.actor});await statusTransitions(previous);adoptPhase();}catch(e){console.error(e);clear(particles);clear(pathGroup);world.position.set(0,0,0);syncUnits();adoptPhase();toast('已恢复对局，请继续行动。');}finally{locked=false;renderUI();if(state.ply!==oldPly)flashTurn();showWin();rememberPosition();scheduleAI();}}
   function setDisabled(){document.querySelectorAll('.action,.touch-action').forEach(b=>{const m=b.dataset.action||b.dataset.command;b.disabled=locked||isAITurn()||!started||!selected||!!state.winner||!legalMode(selected,m).some(o=>!b.dataset.skill||o.kind===b.dataset.skill);b.title=b.disabled?(R.protectedOpening(state)&&m==='attack'?'开局保护中，暂不能攻击':'当前没有合法的'+({auto:'移动或攻击',move:'移动',attack:'攻击',skill:'技能'}[m])+'目标'):({auto:'点击绿格移动，红色目标攻击',move:'移动',attack:'攻击',skill:'技能'}[m]);if(b.dataset.skill)b.title=skillNames[b.dataset.skill]+(b.disabled?' · 当前不可用':'');b.classList.toggle('active',m===mode&&(m!=='skill'||b.dataset.skill===skillKind));});$('finishBtn').disabled=locked||isAITurn();$('resetBtn').disabled=locked;document.querySelectorAll('.skill-choices button,.touch-skill-choices button,.unit-row').forEach(b=>b.disabled=locked||isAITurn());positionWheel();}
   function renderUI(){
-    buildWheel();
+    refreshStatuses();buildWheel();
     document.body.dataset.side=state.side;$('turnNumber').textContent=String(Math.floor(state.ply/2)+1).padStart(2,'0');$('turnSide').textContent=state.winner?'对局结束':sideName(state.side)+'行动';
     $('phaseLabel').textContent=state.winner?'胜负已定':R.protectedOpening(state)?`开局保护 · ${Math.floor(state.ply/2)+1} / 3`:'正式交锋';
     const phases={combo:'连击机会 · 继续攻击或结束',dodge:`${sideName(R.get(state,state.pending?.target)?.side)}防守 · 游侠瞬闪`,retreat:'游击 · 可追加移动一格',bomb:'蓄力完成 · 选择轰炸落点'};
@@ -194,9 +247,9 @@
       }$(side+'Count').textContent=`${state.units.filter(u=>u.alive&&u.side===side).length} / 6`;
     }
     const u=R.get(state,selected);$('selectedCard').innerHTML=u?`<div class="selected-name">${u.name} <small>· ${String.fromCharCode(65+u.x)}${u.y+1}</small></div><div class="selected-desc">${R.HEROES[u.hero]?.desc||'移动一格；攻击恰好三格，可转弯，不穿越单位或重复经过格子。'}${R.trapped(state,u)?'<br>受到设陷：移动与攻击被封锁，跳跃仍可用。':''}</div>`:`<div class="empty-selection">点击己方棋子选择单位。<br>${touchUI.matches?'直接点绿格移动，点红色目标攻击；其他技能在棋盘下方选择。':'悬停高亮落点，预览行进路径。'}</div>`;
-    const help={combo:'连击锁定当前单位。普通连击只能继续吃士兵；斩将可继续吃英雄。',dodge:`${state.pending?describe(R.get(state,state.pending.actor)):''} 正在攻击游侠（橙色圆环与路径）。请选择绿色落点瞬闪，或承受攻击；之后原攻击棋子在攻击落点继续行动。`,retreat:'游侠完成攻击，可移动一格，或点击“结束行动”。',bomb:'巨龙必须完成轰炸：点击横纵零至三格内的落点，包括自己所在格。'};
+    const help={combo:'点红色目标继续连击，或结束行动。',dodge:`${state.pending?describe(R.get(state,state.pending.actor)):''} 正在攻击游侠（橙色圆环与路径）。请选择绿色落点瞬闪，或承受攻击；之后原攻击棋子在攻击落点继续行动。`,retreat:'游侠完成攻击，可移动一格，或点击“结束行动”。',bomb:'巨龙必须完成轰炸：点击横纵零至三格内的落点，包括自己所在格。'};
     $('actionHelp').textContent=state.winner?'对局已结束，可查看棋盘或重新部署。':help[state.phase]||(!u?'选择己方单位，绿格可移动，红色目标可攻击。':mode==='attack'?(touchUI.matches?'攻击必须走满距离。点红色高亮目标完成攻击。':'攻击必须走满距离。悬停目标预览路径，点击目标完成攻击。'):mode==='skill'?'选择高亮格发动技能；移形需要在下方选择要交换的两个单位。':`${u.name}：点击绿色空格移动，点击红色目标攻击。${R.protectedOpening(state)?'开局只能移动，陷阵与神速例外。':''}`);
-    $('skillChoices').innerHTML='';$('touchSkillChoices').innerHTML='';$('touchSkillChoices').hidden=!touchUI.matches||mode!=='skill';if(mode==='skill')for(const o of options().filter(o=>['swap','charge'].includes(o.kind))){const b=document.createElement('button');b.textContent=o.kind==='charge'?'轰炸 · 开始蓄力':`${describe(R.get(state,o.a))} ⇄ ${describe(R.get(state,o.b))}`;b.onclick=()=>perform(o);(touchUI.matches?$('touchSkillChoices'):$('skillChoices')).appendChild(b);}
+    $('skillChoices').innerHTML='';$('touchSkillChoices').innerHTML='';$('touchSkillChoices').hidden=!touchUI.matches||mode!=='skill';if(mode==='skill')for(const o of options().filter(o=>['swap','charge'].includes(o.kind))){const b=document.createElement('button');b.textContent=o.kind==='charge'?'蓄力，准备轰炸':`${describe(R.get(state,o.a))} ⇄ ${describe(R.get(state,o.b))}`;b.onclick=()=>perform(o);(touchUI.matches?$('touchSkillChoices'):$('skillChoices')).appendChild(b);}
     const optional=['combo','dodge','retreat'].includes(state.phase),noAction=!state.winner&&state.phase==='normal'&&!R.hasActions(state);$('finishBtn').hidden=!optional&&!noAction;$('finishBtn').textContent=state.phase==='dodge'?'承受攻击':state.phase==='combo'?'结束连击':noAction?'无行动 · 交接回合':'结束行动';
     $('log').innerHTML=state.events.slice(-25).reverse().map(e=>`<div class="log-entry"><span>${String(Math.floor(e.ply/2)+1).padStart(2,'0')}</span>${e.text}</div>`).join('');setDisabled();highlight();updateWheel();if(isAITurn()&&!state.winner){$('boardStatus').textContent=aiError?'电脑暂未完成行动，请重新部署重试':'靛方 · 正在思考';$('actionHelp').textContent=state.phase==='dodge'?'电脑正在为游侠选择防守方式。':'电脑正在权衡行动。你可以拖动棋盘查看局面。';}$('boardStatus').classList.toggle('ai-thinking',isAITurn()&&!aiError);
   }

@@ -58,6 +58,8 @@ npm run preview
 
 ## 验证
 
+`node tests/skills-browser.cjs`：技能施放、命中表现、被动触发、设陷束缚、共享能力、蓄力与移形保护的浏览器回归。
+
 `node tests/mobile-pages.cjs`：先启动本地预览，验证 320/390/430 像素竖屏和手机横屏的触屏选将、移动、双指缩放、规则弹窗及素材加载。可设置 `GAME_URL` 改测线上地址。
 
 `node tests/combo-browser.cjs`：连续三次吃子、已退场棋子与攻击者坐标重合、动画异常恢复与终局回归。

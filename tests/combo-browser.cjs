@@ -17,7 +17,7 @@ const unit=(id,side,x,y,hero)=>({id,side,x,y,hero,type:hero?'hero':'soldier',nam
   if(id!=='third'){assert.equal(state.actor,'a');assert.equal(state.phase,'combo');}
  }
  assert.equal((await page.evaluate(()=>GameView.state)).winner,'red');assert.deepEqual(errors,[]);
- if(injectFailure)assert.match(await page.locator('#toast').textContent(),/test animation failure/);
+ if(injectFailure)assert.match(await page.locator('#toast').textContent(),/已恢复对局/);
  }
  console.log('PASS: three successive animated captures with victims preceding attacker in unit array; no freeze, input unlocks, victory completes.');
 }finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
