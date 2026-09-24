@@ -9,7 +9,7 @@ const cases=[
  ['teleport',[u('a','red',1,1,'assassin'),u('b','blue',4,3)],'a','skill','teleport',['skill:瞬移','resolve:teleport']],
  ['swap',[u('a','red',2,1,'mage'),u('f','red',1,1),u('b','blue',1,2),u('c','blue',4,3)],'a','skill','swap',['skill:移形','resolve:swap','status:ward']],
  ['charge',[u('a','red',1,1,'dragon'),u('b','blue',4,3)],'a','skill','charge',['skill:轰炸·蓄力','resolve:charge','status:charge']],
- ['bomb',[{...u('a','red',1,1,'dragon'),charged:true},u('b','blue',4,3)],'a','skill','bomb',['skill:轰炸','resolve:bomb'],{phase:'bomb',actor:'a'}],
+ ['bomb',[{...u('a','red',1,1,'dragon'),charged:true},u('b','blue',3,1),u('c','blue',4,3),u('f','red',2,1)],'a','skill','bomb',['skill:轰炸','dragon-impact','resolve:bomb'],{phase:'bomb',actor:'a'}],
  ['short',[u('a','red',1,1,'assassin'),u('b','blue',2,1),u('c','blue',4,3)],'a','attack','attack',['skill:短兵']],
  ['arsenal',[u('a','red',1,1,'pikeman'),u('b','blue',2,1),u('c','blue',4,3)],'a','attack','attack',['skill:武库']],
  ['cruel',[u('a','red',1,1,'wolf'),u('b','red',3,1,'knight'),u('c','blue',4,3)],'a','attack','attack',['skill:残忍','skill:斩将']],
@@ -18,17 +18,18 @@ const cases=[
 ];
 (async()=>{const browser=await pw.chromium.launch({channel:'msedge',headless:true});try{
  const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.stack));
- for(const [name,units,id,mode,kind,effects,extra] of cases){
+ for(const [name,units,id,mode,kind,effects,extra] of cases.filter(c=>!process.env.SKILL_CASE||c[0]===process.env.SKILL_CASE)){
   await page.goto(pathToFileURL(path.resolve(__dirname,'../index.html')).href);await page.evaluate(s=>{const create=Rules.create;Rules.create=()=>{Rules.create=create;return s;};},board(units,extra));await draftGame(page);
-  await page.evaluate(()=>{window.effects=new Set();const update=THREE.Scene.prototype.updateMatrixWorld;THREE.Scene.prototype.updateMatrixWorld=function(...args){this.traverse(o=>{if(o.userData.effect)effects.add(o.userData.effect);});return update.apply(this,args);};});
+  await page.evaluate(()=>{window.effects=new Set();window.maxShake=0;window.lastShake=0;const update=THREE.Scene.prototype.updateMatrixWorld;THREE.Scene.prototype.updateMatrixWorld=function(...args){window.lastShake=this.children.find(o=>o.isGroup)?.position.length()||0;window.maxShake=Math.max(maxShake,lastShake);this.traverse(o=>{if(o.userData.effect)effects.add(o.userData.effect);});return update.apply(this,args);};});
   await page.click(`[data-unit="${id}"]`);
   if(mode==='skill')await page.locator(`[data-skill="${kind}"] .sector-label`).click();
-  const opt=R.legal(board(units,extra),id,mode).find(o=>o.kind===kind&&(name!=='trap'||o.x===3&&o.y===2)&&(name!=='teleport'||o.x===4&&o.y===2));assert.ok(opt,name);
+  const opt=R.legal(board(units,extra),id,mode).find(o=>o.kind===kind&&(name!=='trap'||o.x===3&&o.y===2)&&(name!=='teleport'||o.x===4&&o.y===2)&&(name!=='bomb'||o.x===3&&o.y===1));assert.ok(opt,name);
   const eventsBefore=await page.evaluate(()=>GameView.state.events.length);
   if(kind==='swap'||kind==='charge')await page.locator('#skillChoices button').first().click();else{const p=await page.evaluate(o=>GameView.project(o.x,o.y),opt);await page.mouse.click(p.x,p.y);}
   await page.waitForFunction(n=>!GameView.locked&&GameView.state.events.length>n,eventsBefore,{timeout:12000});
   await page.waitForTimeout(60);const seen=await page.evaluate(()=>[...effects]);for(const effect of effects)assert.ok(seen.includes(effect),`${name}: missing ${effect}; saw ${seen}`);
   assert.equal(await page.locator('#toast').evaluate(e=>e.classList.contains('show')&&e.textContent.includes('恢复')),false);
+  if(name==='bomb'){assert.ok(await page.evaluate(()=>maxShake>.04));assert.equal(await page.evaluate(()=>lastShake),0);const final=await page.evaluate(()=>GameView.state);assert.equal(R.get(final,'b').alive,false);assert.equal(R.get(final,'f').alive,false);assert.equal(R.get(final,'a').alive,true);}
   if(name==='trap')await page.screenshot({path:'artifacts/skill-trap.png'});
   console.log('PASS skill '+name);
  }

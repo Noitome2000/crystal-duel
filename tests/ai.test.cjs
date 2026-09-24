@@ -5,6 +5,19 @@ function board(...units){const s=R.create();s.ply=6;s.side='blue';s.units=units;
 const budget={maxDepth:3,maxNodes:2500,timeMs:2000};
 test('AI enumerates only engine-approved actions and leaves the original state unchanged',async()=>{const s=R.create();s.side='blue';const before=JSON.stringify(s);const out=await AI.choose(s,budget);assert.ok(AI.actions(s).some(a=>JSON.stringify(a)===JSON.stringify(out.action)));assert.equal(JSON.stringify(s),before);assert.ok(out.stats.nodes<=2500);});
 test('AI takes immediate win',async()=>{const s=board(unit('b','blue',1,1,'knight'),unit('r','red',3,1));const result=await AI.choose(s,budget);assert.equal(AI.next(s,result.action).winner,'blue');});
+test('shallow search sees recapture and avoids sacrificing the last hero for bait',async()=>{
+ const s=board(unit('a','blue',2,1,'assassin'),unit('bait','red',3,1),unit('guard','red',3,2,'assassin'));
+ const result=await AI.choose(s,{maxDepth:1,maxNodes:2500,timeMs:2000});
+ assert.notEqual(result.action.opt.target,'bait');
+ const next=AI.next(s,result.action);
+ assert.ok(AI.actions(next).every(a=>AI.next(next,a).winner!=='red'));
+ assert.ok(result.stats.cacheHits>0);
+});
+test('search cache keys distinguish different pending attacks',()=>{
+ const s=board(unit('a','red',1,1,'knight'),unit('r','blue',3,1,'ranger'));s.side='red';
+ R.apply(s,'a','attack',R.legal(s,'a','attack')[0]);const other=JSON.parse(JSON.stringify(s));other.pending.opt.path.reverse();
+ assert.notEqual(AI.key(s),AI.key(other));
+});
 test('AI avoids unnecessary friendly capture by wolf',async()=>{const s=board(unit('b','blue',1,1,'wolf'),unit('friend','blue',3,1),unit('enemy','red',1,3));const {action}=await AI.choose(s,budget);assert.equal(action.opt.target,'enemy');});
 test('AI recognizes that the defender controls a ranger reaction',async()=>{const s=board(unit('a','red',1,1,'knight'),unit('r','blue',3,1,'ranger'));s.side='red';R.apply(s,'a','attack',R.legal(s,'a','attack')[0]);assert.equal(s.phase,'dodge');assert.equal(AI.owner(s),'blue');const {action}=await AI.choose(s,budget);assert.equal(action.type,'act');assert.equal(action.opt.kind,'dodge');assert.equal(R.get(AI.next(s,action),'r').alive,true);});
 test('human ranger response remains human even during computer attacking turn',()=>{const s=board(unit('a','blue',1,1,'knight'),unit('r','red',3,1,'ranger'));R.apply(s,'a','attack',R.legal(s,'a','attack')[0]);assert.equal(AI.owner(s),'red');});

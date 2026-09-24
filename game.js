@@ -208,6 +208,28 @@
       if(!reduced)world.position.set(Math.sin(t*45)*.018*(1-t),0,Math.cos(t*38)*.015*(1-t));
     });world.position.set(0,0,0);clear(particles);
   }
+  async function dragonImpact(opt,dead){
+    const fx=new THREE.Group();world.add(fx);fx.userData.effect='dragon-impact';
+    const glow=add(fx,new THREE.SphereGeometry(.24,16,12),new THREE.MeshBasicMaterial({color:0xffe8ad,transparent:true,opacity:.95,depthWrite:false}),opt.x,.35,opt.y);
+    const rings=[.35,.50,.65].map(r=>effectRing(fx,opt.x,opt.y,0xffab59,r));
+    const light=new THREE.PointLight(0xffa24a,0,7);light.position.set(opt.x,1.5,opt.y);fx.add(light);
+    const sparks=[];for(let i=0;i<(reduced?0:touchUI.matches?28:48);i++){
+      const angle=i*2.39996,speed=.7+Math.random()*1.2;
+      const mesh=add(fx,new THREE.OctahedronGeometry(.035+Math.random()*.04),new THREE.MeshBasicMaterial({color:i%3?0xffb355:0xffeece,transparent:true,depthWrite:false}),opt.x,.3,opt.y);
+      sparks.push({mesh,angle,speed,lift:.4+Math.random()*1.4});
+    }
+    try{
+      // A brief compression beat makes the expanding shock wave read as a heavy impact.
+      await tween(110,t=>{glow.scale.setScalar(1+t*2);light.intensity=t*5;if(!reduced)world.position.y=-Math.sin(Math.PI*t)*.065;});
+      await tween(780,t=>{
+        const fade=1-t;glow.scale.setScalar(3+t*6);glow.material.opacity=fade*fade*.65;light.intensity=fade*5;
+        rings.forEach((r,i)=>{const p=Math.max(0,(t-i*.09)/(1-i*.09));r.scale.setScalar(1+p*(7-i));r.material.opacity=(1-p)*.85;});
+        for(const {mesh,angle,speed,lift} of sparks){mesh.position.set(opt.x+Math.cos(angle)*speed*t,.3+lift*Math.sin(Math.PI*t)-t*.15,opt.y+Math.sin(angle)*speed*t);mesh.rotation.set(t*5,angle,t*7);mesh.material.opacity=fade;}
+        for(const u of dead){const m=meshes.get(u.id);if(!m)continue;const dx=u.x-opt.x,dz=u.y-opt.y;m.position.copy(vec(u.x+dx*t*.24,u.y+dz*t*.24,.16+Math.sin(Math.PI*t)*.28));m.scale.setScalar(Math.max(.001,1-t*1.3));m.rotation.z=-dx*t*.7;m.rotation.x=dz*t*.7;}
+        if(!reduced){const strength=fade*fade*.10;world.position.set(Math.sin(t*83)*strength,Math.sin(t*67)*strength*.4,Math.cos(t*71)*strength*.7);}
+      });
+    }finally{world.position.set(0,0,0);world.remove(fx);dispose(fx);}
+  }
   async function animateResult(before,result){
     if(result.kind==='reaction'){showPath(result.opt);return;}
     if(result.kind==='dodge'){await animateDodge(before,result);return;}
@@ -220,9 +242,10 @@
     if(result.kind==='attack')await tween(280,()=>{});
     const duration=result.kind==='bomb'?850:Math.max(480,(opt?.path?.length||2)*230);
     let trailTick=-1;
-    await tween(duration,t=>{if(['attack','speed','retreat','vault','teleport'].includes(result.kind)&&!reduced&&Math.floor(t*16)!==trailTick){trailTick=Math.floor(t*16);for(const u of moving){const g=meshes.get(u.id);if(g)ghost(g,.16);}}const eased=result.kind==='attack'?.90*(t*t*(3-2*t)):t*t*(3-2*t);for(const u of moving){const g=meshes.get(u.id),b=before.find(b=>b.id===u.id);if(!g)continue;const p=opt?.path?.length&&opt.path[0].x===b.x&&opt.path[0].y===b.y?opt.path:[b,u];if(result.kind==='teleport'){const fade=t<.5?1-t*2:(t-.5)*2;g.position.copy(t<.5?vec(b.x,b.y):vec(u.x,u.y));g.scale.setScalar(Math.max(.02,fade));}else if(result.kind==='swap'){g.position.lerpVectors(vec(b.x,b.y),vec(u.x,u.y),eased);const sign=u.id===opt.a?1:-1;g.position.x+=Math.sin(Math.PI*t)*.18*sign;g.position.y+=Math.sin(Math.PI*t)*.4;}else if(jump){g.position.lerpVectors(vec(b.x,b.y),vec(u.x,u.y),eased);g.position.y+=Math.sin(Math.PI*t)*.75;}else{const d=eased*(p.length-1),i=Math.min(Math.floor(d),p.length-2);g.position.lerpVectors(vec(p[i].x,p[i].y),vec(p[i+1].x,p[i+1].y),d-i);g.position.y+=Math.sin(t*Math.PI)*.07;}}});
+    await tween(duration,t=>{if(['attack','speed','retreat','vault','teleport'].includes(result.kind)&&!reduced&&Math.floor(t*16)!==trailTick){trailTick=Math.floor(t*16);for(const u of moving){const g=meshes.get(u.id);if(g)ghost(g,.16);}}const eased=result.kind==='attack'?.90*(t*t*(3-2*t)):t*t*(3-2*t);for(const u of moving){const g=meshes.get(u.id),b=before.find(b=>b.id===u.id);if(!g)continue;const p=opt?.path?.length&&opt.path[0].x===b.x&&opt.path[0].y===b.y?opt.path:[b,u];if(result.kind==='teleport'){const fade=t<.5?1-t*2:(t-.5)*2;g.position.copy(t<.5?vec(b.x,b.y):vec(u.x,u.y));g.scale.setScalar(Math.max(.02,fade));}else if(result.kind==='swap'){g.position.lerpVectors(vec(b.x,b.y),vec(u.x,u.y),eased);const sign=u.id===opt.a?1:-1;g.position.x+=Math.sin(Math.PI*t)*.18*sign;g.position.y+=Math.sin(Math.PI*t)*.4;}else if(jump){g.position.lerpVectors(vec(b.x,b.y),vec(u.x,u.y),eased);g.position.y+=Math.sin(Math.PI*t)*(result.kind==='bomb'?1.6:.75);}else{const d=eased*(p.length-1),i=Math.min(Math.floor(d),p.length-2);g.position.lerpVectors(vec(p[i].x,p[i].y),vec(p[i+1].x,p[i+1].y),d-i);g.position.y+=Math.sin(t*Math.PI)*.07;}}});
     clear(particles);
-    if(result.kind==='attack'&&dead.length)await captureImpact(actor,dead[0],opt);
+    if(result.kind==='bomb')await dragonImpact(opt,dead);
+    else if(result.kind==='attack'&&dead.length)await captureImpact(actor,dead[0],opt);
     else if(dead.length||result.kind==='bomb'){
       const bursts=dead.map(u=>({x:u.x,y:u.y}));if(!bursts.length&&opt)bursts.push(opt);
       for(const c of bursts)for(let i=0;i<(reduced?0:12);i++){const m=add(particles,new THREE.IcosahedronGeometry(.045),new THREE.MeshBasicMaterial({color:0xe7c987,transparent:true}),c.x,.4,c.y);m.userData={origin:m.position.clone(),angle:i*Math.PI/6,speed:.35+Math.random()*.4};}
