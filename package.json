@@ -1,0 +1,12 @@
+{
+  "name": "crystal-duel",
+  "version": "1.0.0",
+  "private": true,
+  "description": "晶界：浏览器三维战棋",
+  "scripts": {
+    "build": "node scripts/build.cjs",
+    "test": "node --test tests/rules.test.cjs tests/ai.test.cjs tests/draft.test.cjs",
+    "preview": "node scripts/preview.cjs"
+  },
+  "engines": {"node": ">=20"}
+}

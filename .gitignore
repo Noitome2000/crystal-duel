@@ -1,0 +1,11 @@
+dist/
+.tools/
+node_modules/
+artifacts/
+.env*
+.codex*
+execution.toml
+*.docx
+*.lnk
+*.zip
+*.log
