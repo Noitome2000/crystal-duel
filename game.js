@@ -2,7 +2,7 @@
 (() => {
   'use strict';
   const R=window.Rules,$=id=>document.getElementById(id),sideName=s=>s==='red'?'赤方':'靛方';
-  let state=R.create(),selected=null,mode='auto',skillKind=null,started=false,locked=false;
+  let state=R.create(),selected=null,mode='auto',skillKind=null,swapFirst=null,started=false,locked=false;
   const skillNames={push:'推进',speed:'神速',vault:'陷阵',teleport:'瞬移',swap:'移形',charge:'轰炸·蓄力',bomb:'轰炸',dodge:'瞬闪',retreat:'游击'};
   let draft=GameDraft.create(),draftBusy=false,draftEpoch=0,draftTimer=null;
   let opponent='ai',aiBusy=false,aiTimer=null,aiEpoch=0,aiError=false,wheelOpen=true,wheelDismissed=false;
@@ -97,7 +97,8 @@
   function options(){return selected?legalMode(selected,mode).filter(o=>mode!=='skill'||!skillKind||o.kind===skillKind):[];}
   function highlight(){clear(overlay);clearPath();const u=R.get(state,selected);if(u?.alive){const ring=add(overlay,new THREE.TorusGeometry(.40,.018,6,48),new THREE.MeshBasicMaterial({color:0xf3d291}),u.x,.13,u.y);ring.rotation.x=Math.PI/2;}
     if(state.phase==='dodge'&&state.pending){const a=R.get(state,state.pending.actor);const marker=add(overlay,new THREE.TorusGeometry(.46,.045,8,48),new THREE.MeshBasicMaterial({color:0xff6644,depthTest:false}),a.x,.18,a.y);marker.rotation.x=Math.PI/2;const text=label('攻击者','#ffb090',.26);text.position.copy(vec(a.x,a.y,1.48));overlay.add(text);}
-    const seen=new Set();for(const o of options()){const cells=o.kind==='swap'?[R.get(state,o.a),R.get(state,o.b)]:[o];for(const c of cells){
+    if(swapFirst){const first=R.get(state,swapFirst);effectRing(overlay,first.x,first.y,0xc19bff,.48);}
+    const seen=new Set();for(const o of options()){const cells=o.kind==='swap'?(swapFirst?(o.a===swapFirst||o.b===swapFirst?[R.get(state,o.a===swapFirst?o.b:o.a)]:[]):[R.get(state,o.a),R.get(state,o.b)]):[o];for(const c of cells){
       const k=R.key(c);if(seen.has(k))continue;seen.add(k);
       const color=o.kind==='attack'?0xff533b:mode==='skill'?0xffd35c:0x3dffb6;
       const fill=add(overlay,new THREE.BoxGeometry(.83,.012,.83),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.6,depthWrite:false}),c.x,.105,c.y);fill.userData.pulse=true;
@@ -111,8 +112,21 @@
   function drawPath(opt){if(!opt?.path?.length)return;const points=opt.path.map(c=>vec(c.x,c.y,.125));const curve=new THREE.Line(new THREE.BufferGeometry().setFromPoints(points),new THREE.LineBasicMaterial({color:0xffdd99,depthTest:false,transparent:true,opacity:.9}));pathGroup.add(curve);points.forEach((p,i)=>{const l=label(String(i),'#fff2c6',.18);l.position.copy(p).add(new THREE.Vector3(0,.09,0));pathGroup.add(l);});if(opt.kind==='bomb')for(const c of R.CELLS.filter(c=>Math.abs(c.x-opt.x)<=1&&Math.abs(c.y-opt.y)<=1))add(pathGroup,new THREE.BoxGeometry(.84,.015,.84),new THREE.MeshBasicMaterial({color:0xf08a65,transparent:true,opacity:.4,depthWrite:false}),c.x,.115,c.y);}
   function hit(e){const r=renderer.domElement.getBoundingClientRect(),ray=new THREE.Raycaster();ray.setFromCamera(new THREE.Vector2((e.clientX-r.left)/r.width*2-1,1-(e.clientY-r.top)/r.height*2),camera);const hits=ray.intersectObjects([...meshes.values(),...tileMeshes],true);for(const h of hits){let obj=h.object;while(obj&&!obj.userData.unitId&&!obj.userData.cell)obj=obj.parent;if(obj?.userData.unitId){const u=R.get(state,obj.userData.unitId);if(!u?.alive)continue;return {x:u.x,y:u.y,unit:u};}if(obj?.userData.cell){const c=obj.userData.cell;return {...c,unit:R.at(state,c.x,c.y)};}}return null;}
   function preview(e){if(locked||!started||isAITurn()||anyDialog())return;const h=hit(e),k=h?R.key(h):'';if(k===hoverKey)return;const o=h&&options().find(o=>o.x===h.x&&o.y===h.y);showPath(o);hoverKey=k;renderer.domElement.style.cursor=o||h?.unit?'pointer':'grab';}
-  function pick(e){if(locked||!started||state.winner||isAITurn())return;const h=hit(e);if(!h){dismissWheel();return;}const o=options().find(o=>o.x===h.x&&o.y===h.y&&o.kind!=='swap');if(o){perform(o);return;}if(h.unit)select(h.unit.id);else dismissWheel();}
-  function select(id){if(locked||!started||state.winner||isAITurn())return;const u=R.get(state,id);if(!u?.alive)return;if(state.phase==='dodge'){if(id!==state.pending.target)return toast('由防守方为游侠选择瞬闪，或承受攻击');}else if(u.side!==state.side)return toast(`现在轮到${sideName(state.side)}`);else if(state.actor&&id!==state.actor)return toast('请先完成当前单位的后续行动');selected=id;skillKind=null;wheelOpen=true;wheelDismissed=false;mode=state.phase==='bomb'?'skill':'auto';renderUI();}
+  function pick(e){if(locked||!started||state.winner||isAITurn())return;const h=hit(e);if(!h){dismissWheel();return;}if(pickSwap(h.unit?.id))return;const o=options().find(o=>o.x===h.x&&o.y===h.y&&o.kind!=='swap');if(o){perform(o);return;}if(h.unit)select(h.unit.id);else dismissWheel();}
+  function pickSwap(id){
+    if(mode!=='skill'||skillKind!=='swap')return false;
+    const pairs=options();
+    if(id===swapFirst){swapFirst=null;renderUI();return true;}
+    if(swapFirst){
+      const pair=pairs.find(o=>o.a===swapFirst&&o.b===id||o.b===swapFirst&&o.a===id);
+      if(pair){perform(pair);return true;}
+      toast('请选择与已选棋子相邻的高亮棋子，或取消重选');return true;
+    }
+    if(pairs.some(o=>o.a===id||o.b===id)){swapFirst=id;renderUI();}
+    else toast('请选择高亮棋子作为移形的第一个目标');
+    return true;
+  }
+  function select(id){if(locked||!started||state.winner||isAITurn())return;const u=R.get(state,id);if(!u?.alive)return;if(state.phase==='dodge'){if(id!==state.pending.target)return toast('由防守方为游侠选择瞬闪，或承受攻击');}else if(u.side!==state.side)return toast(`现在轮到${sideName(state.side)}`);else if(state.actor&&id!==state.actor)return toast('请先完成当前单位的后续行动');selected=id;skillKind=null;swapFirst=null;wheelOpen=true;wheelDismissed=false;mode=state.phase==='bomb'?'skill':'auto';renderUI();}
   function ghost(g,opacity=.32){
     const copy=g.clone(true);copy.traverse(o=>{if(o.isSprite)o.visible=false;if(o.geometry)o.geometry=o.geometry.clone();if(o.material){o.material=o.material.clone();o.material.map=null;o.material.transparent=true;o.material.opacity=opacity;o.material.depthWrite=false;}});particles.add(copy);return copy;
   }
@@ -255,7 +269,7 @@
     if(pathGroup)clear(pathGroup);syncUnits();
   }
   async function perform(opt,byAI=false){if(locked||(!byAI&&isAITurn()))return;const previous={...state,units:state.units.map(u=>({...u}))},before=previous.units,oldPly=state.ply;locked=true;setDisabled();try{const result=R.apply(state,selected,mode==='auto'?(opt.kind==='attack'?'attack':'move'):mode,opt);await animateResult(before,result);if(result.kind!=='reaction')await statusTransitions(previous);adoptPhase();}catch(e){console.error(e);clear(particles);clear(pathGroup);world.position.set(0,0,0);syncUnits();adoptPhase();toast('已恢复对局，请继续行动。');}finally{locked=false;renderUI();if(state.ply!==oldPly)flashTurn();showWin();rememberPosition();scheduleAI();}}
-  function adoptPhase(){skillKind=null;wheelOpen=true;wheelDismissed=false;if(state.phase==='dodge'){selected=state.pending.target;mode='auto';}else if(state.actor){selected=state.actor;mode=state.phase==='bomb'?'skill':'auto';}else{selected=null;mode='auto';}}
+  function adoptPhase(){skillKind=null;swapFirst=null;wheelOpen=true;wheelDismissed=false;if(state.phase==='dodge'){selected=state.pending.target;mode='auto';}else if(state.actor){selected=state.actor;mode=state.phase==='bomb'?'skill':'auto';}else{selected=null;mode='auto';}}
   async function finishChoice(byAI=false){if(locked||(!byAI&&isAITurn()))return;const previous={...state,units:state.units.map(u=>({...u}))},before=previous.units,oldPly=state.ply,p=state.pending;locked=true;setDisabled();try{if(state.phase==='normal')R.pass(state);else R.decline(state);if(p)await animateResult(before,{kind:'attack',opt:p.opt,actor:p.actor});await statusTransitions(previous);adoptPhase();}catch(e){console.error(e);clear(particles);clear(pathGroup);world.position.set(0,0,0);syncUnits();adoptPhase();toast('已恢复对局，请继续行动。');}finally{locked=false;renderUI();if(state.ply!==oldPly)flashTurn();showWin();rememberPosition();scheduleAI();}}
   function setDisabled(){document.querySelectorAll('.action,.touch-action').forEach(b=>{const m=b.dataset.action||b.dataset.command;b.disabled=locked||isAITurn()||!started||!selected||!!state.winner||!legalMode(selected,m).some(o=>!b.dataset.skill||o.kind===b.dataset.skill);b.title=b.disabled?(R.protectedOpening(state)&&m==='attack'?'开局保护中，暂不能攻击':'当前没有合法的'+({auto:'移动或攻击',move:'移动',attack:'攻击',skill:'技能'}[m])+'目标'):({auto:'点击绿格移动，红色目标攻击',move:'移动',attack:'攻击',skill:'技能'}[m]);if(b.dataset.skill)b.title=skillNames[b.dataset.skill]+(b.disabled?' · 当前不可用':'');b.classList.toggle('active',m===mode&&(m!=='skill'||b.dataset.skill===skillKind));});$('finishBtn').disabled=locked||isAITurn();$('resetBtn').disabled=locked;document.querySelectorAll('.skill-choices button,.touch-skill-choices button,.unit-row').forEach(b=>b.disabled=locked||isAITurn());positionWheel();}
   function renderUI(){
@@ -266,19 +280,21 @@
     $('boardStatus').textContent=state.winner?'对局结束':phases[state.phase]||`${sideName(state.side)}行动 · ${R.protectedOpening(state)?'开局保护':'自由交锋'}`;
     for(const side of ['red','blue']){
       const roster=$(side+'Roster');roster.innerHTML='';for(const u of state.units.filter(u=>u.side===side)){
-        const b=document.createElement('button');b.className='unit-row'+(!u.alive?' dead':'')+(u.id===selected?' selected':'');b.dataset.unit=u.id;const def=R.HEROES[u.hero];b.innerHTML=`<span class="unit-icon ${side}">${def?heroPortrait(u.hero):'兵'}</span><span class="unit-name">${u.name}<span class="unit-type">${def?.skill||'移动一格 · 攻击三格'}</span></span><span class="status-tag">${!u.alive?'退场':u.charged?'蓄力':R.trapped(state,u)?'受困':!R.ready(state,u)?'冷却':''}</span>`;b.onclick=()=>{if(locked||isAITurn())return;const o=options().find(o=>o.x===u.x&&o.y===u.y&&o.kind!=='swap');if(o)perform(o);else select(u.id);};roster.appendChild(b);
+        const b=document.createElement('button');b.className='unit-row'+(!u.alive?' dead':'')+(u.id===selected?' selected':'');b.dataset.unit=u.id;const def=R.HEROES[u.hero];b.innerHTML=`<span class="unit-icon ${side}">${def?heroPortrait(u.hero):'兵'}</span><span class="unit-name">${u.name}<span class="unit-type">${def?.skill||'移动一格 · 攻击三格'}</span></span><span class="status-tag">${!u.alive?'退场':u.charged?'蓄力':R.trapped(state,u)?'受困':!R.ready(state,u)?'冷却':''}</span>`;b.onclick=()=>{if(locked||isAITurn())return;if(pickSwap(u.id))return;const o=options().find(o=>o.x===u.x&&o.y===u.y&&o.kind!=='swap');if(o)perform(o);else select(u.id);};roster.appendChild(b);
       }$(side+'Count').textContent=`${state.units.filter(u=>u.alive&&u.side===side).length} / 6`;
     }
     const u=R.get(state,selected);$('selectedCard').innerHTML=u?`<div class="selected-name">${u.name} <small>· ${String.fromCharCode(65+u.x)}${u.y+1}</small></div><div class="selected-desc">${R.HEROES[u.hero]?.desc||'移动一格；攻击恰好三格，可转弯，不穿越单位或重复经过格子。'}${R.trapped(state,u)?'<br>受到设陷：移动与攻击被封锁，跳跃仍可用。':''}</div>`:`<div class="empty-selection">点击己方棋子选择单位。<br>${touchUI.matches?'直接点绿格移动，点红色目标攻击；其他技能在棋盘下方选择。':'悬停高亮落点，预览行进路径。'}</div>`;
     const help={combo:'点红色目标继续连击，或结束行动。',dodge:`${state.pending?describe(R.get(state,state.pending.actor)):''} 正在攻击游侠（橙色圆环与路径）。请选择绿色落点瞬闪，或承受攻击；之后原攻击棋子在攻击落点继续行动。`,retreat:'游侠完成攻击，可移动一格，或点击“结束行动”。',bomb:'巨龙必须完成轰炸：点击横纵零至三格内的落点，包括自己所在格。'};
-    $('actionHelp').textContent=state.winner?'对局已结束，可查看棋盘或重新部署。':help[state.phase]||(!u?'选择己方单位，绿格可移动，红色目标可攻击。':mode==='attack'?(touchUI.matches?'攻击必须走满距离。点红色高亮目标完成攻击。':'攻击必须走满距离。悬停目标预览路径，点击目标完成攻击。'):mode==='skill'?'选择高亮格发动技能；移形需要在下方选择要交换的两个单位。':`${u.name}：点击绿色空格移动，点击红色目标攻击。${R.protectedOpening(state)?'开局只能移动，陷阵与神速例外。':''}`);
-    $('skillChoices').innerHTML='';$('touchSkillChoices').innerHTML='';$('touchSkillChoices').hidden=!touchUI.matches||mode!=='skill';if(mode==='skill')for(const o of options().filter(o=>['swap','charge'].includes(o.kind))){const b=document.createElement('button');b.textContent=o.kind==='charge'?'蓄力，准备轰炸':`${describe(R.get(state,o.a))} ⇄ ${describe(R.get(state,o.b))}`;b.onclick=()=>perform(o);(touchUI.matches?$('touchSkillChoices'):$('skillChoices')).appendChild(b);}
+    $('actionHelp').textContent=state.winner?'对局已结束，可查看棋盘或重新部署。':help[state.phase]||(!u?'选择己方单位，绿格可移动，红色目标可攻击。':mode==='attack'?(touchUI.matches?'攻击必须走满距离。点红色高亮目标完成攻击。':'攻击必须走满距离。悬停目标预览路径，点击目标完成攻击。'):mode==='skill'?(skillKind==='swap'?(swapFirst?'已选'+describe(R.get(state,swapFirst))+'，请点击与其相邻的高亮棋子；再次点击已选棋子可重选。':'移形：先点击一枚高亮棋子，再点击与它相邻的另一枚高亮棋子。'):'选择高亮格发动技能。'):`${u.name}：点击绿色空格移动，点击红色目标攻击。${R.protectedOpening(state)?'开局只能移动，陷阵与神速例外。':''}`);
+    $('skillChoices').innerHTML='';$('touchSkillChoices').innerHTML='';$('touchSkillChoices').hidden=!touchUI.matches||mode!=='skill';if(mode==='skill')for(const o of options().filter(o=>o.kind==='charge')){const b=document.createElement('button');b.textContent='蓄力，准备轰炸';b.onclick=()=>perform(o);(touchUI.matches?$('touchSkillChoices'):$('skillChoices')).appendChild(b);}
+    if(mode==='skill'&&skillKind==='swap'&&swapFirst){const b=document.createElement('button');b.textContent='取消选择 · 重新点选';b.onclick=()=>{swapFirst=null;renderUI();};(touchUI.matches?$('touchSkillChoices'):$('skillChoices')).appendChild(b);}
+    $('skillChoices').hidden=touchUI.matches||!selected||mode!=='skill';
     const optional=['combo','dodge','retreat'].includes(state.phase),noAction=!state.winner&&state.phase==='normal'&&!R.hasActions(state);$('finishBtn').hidden=!optional&&!noAction;$('finishBtn').textContent=state.phase==='dodge'?'承受攻击':state.phase==='combo'?'结束连击':noAction?'无行动 · 交接回合':'结束行动';
     $('log').innerHTML=state.events.slice(-25).reverse().map(e=>`<div class="log-entry"><span>${String(Math.floor(e.ply/2)+1).padStart(2,'0')}</span>${e.text}</div>`).join('');setDisabled();highlight();updateWheel();if(isAITurn()&&!state.winner){$('boardStatus').textContent=aiError?'电脑暂未完成行动，请重新部署重试':'靛方 · 正在思考';$('actionHelp').textContent=state.phase==='dodge'?'电脑正在为游侠选择防守方式。':'电脑正在权衡行动。你可以拖动棋盘查看局面。';}$('boardStatus').classList.toggle('ai-thinking',isAITurn()&&!aiError);
   }
   function dismissWheel(){
     if(locked||anyDialog()||isAITurn())return;
-    wheelDismissed=true;wheelOpen=false;
+    wheelDismissed=true;wheelOpen=false;swapFirst=null;if(skillKind==='swap'){mode='auto';skillKind=null;}
     if(state.phase==='normal'&&!state.actor)selected=null;
     clearPath();renderUI();
   }
@@ -291,7 +307,7 @@
     entries.forEach((entry,i)=>{
       const button=document.createElement('button');button.className='action';button.dataset.action=entry.mode;if(entry.kind)button.dataset.skill=entry.kind;
       button.setAttribute('aria-label',entry.name);button.innerHTML=`<span class="sector-label"><i>${entry.icon}</i><b>${entry.name}</b><small>${i+1}</small></span>`;
-      button.onclick=()=>{if(locked||button.disabled||isAITurn())return;mode=entry.mode;skillKind=entry.kind||null;wheelOpen=false;renderUI();};
+      button.onclick=()=>{if(locked||button.disabled||isAITurn())return;mode=entry.mode;skillKind=entry.kind||null;swapFirst=null;wheelOpen=false;renderUI();};
       $('wheelToggle').before(button);
       const touchButton=document.createElement('button');touchButton.className='touch-action';touchButton.dataset.command=entry.mode;if(entry.kind)touchButton.dataset.skill=entry.kind;touchButton.textContent=entry.name;touchButton.onclick=button.onclick;$('touchActions').appendChild(touchButton);
       button.dataset.index=i;button.dataset.count=entries.length;
@@ -324,10 +340,7 @@
       button.style.clipPath=`polygon(${points.join(',')})`;
       const p=point(.79,angle),label=button.querySelector('.sector-label');label.style.left=`${p.x}px`;label.style.top=`${p.y}px`;
     });
-    // The optional target list sits below the base; the board remains clickable through the hole.
-    const choices=$('skillChoices');choices.style.top='145px';
-    const offset=THREE.MathUtils.clamp(center.x,135,box.clientWidth-135)-center.x;
-    choices.style.left=`${90+offset}px`;
+
   }
   function anyDialog(){return !!document.querySelector('dialog[open]');}
   function isAITurn(){return started&&opponent==='ai'&&!state.winner&&GameAI.owner(state)==='blue';}
@@ -407,7 +420,7 @@
       b.onmouseenter=()=>inspectHero(id);b.onfocus=()=>inspectHero(id);b.onclick=()=>{if(!touchUI.matches){inspectHero(id);pickDraft(id);return;}if(touchDraftCandidate===id){touchDraftCandidate=null;pickDraft(id);return;}touchDraftCandidate=id;inspectHero(id);$('heroDetail').scrollIntoView({block:'nearest',behavior:reduced?'instant':'smooth'});};$('heroGrid').appendChild(b);
     }
     inspectHero(inspectedHero);
-    $('draftHint').textContent=draft.stage==='ready'?`部署完成，${sideName(draft.first)}即将行动。`:turn?`${computer?'电脑正在选择': '请选择'} ${sideName(turn.side)} ${turn.slot} 号位英雄`:'投币后按顺序选将，1 号位在上，2 号位在下。';
+    $('draftHint').textContent=draft.stage==='ready'?`部署完成，${sideName(draft.first)}先手，请点击按钮进入战场。`:turn?`${computer?'电脑正在选择': '请选择'} ${sideName(turn.side)} ${turn.slot} 号位英雄`:'投币后按顺序选将，1 号位在上，2 号位在下。';
     $('startBtn').disabled=draft.stage!=='ready';$('startBtn').hidden=draft.stage!=='ready';$('startBtn').textContent='部署完成 · 进入战场 →';
   }
   async function tossCoin(){
@@ -420,7 +433,7 @@
     const turn=GameDraft.current(draft);if(!turn||draftBusy||(!byAI&&turn.side==='blue'&&$('opponent').value==='ai'))return;
     try{GameDraft.choose(draft,turn.side,hero);}catch(e){toast(e.message);return;}
     draftBusy=true;renderDraft();const epoch=draftEpoch;
-    draftTimer=setTimeout(()=>{draftTimer=null;if(epoch!==draftEpoch||!$('setupDialog').open)return;draftBusy=false;renderDraft();if(draft.stage==='ready')start();else scheduleDraft();},reduced?60:400);
+    draftTimer=setTimeout(()=>{draftTimer=null;if(epoch!==draftEpoch||!$('setupDialog').open)return;draftBusy=false;renderDraft();if(draft.stage==='ready')$('startBtn').scrollIntoView({block:'nearest'});else scheduleDraft();},reduced?60:400);
   }
   function scheduleDraft(){
     const turn=GameDraft.current(draft);if(!turn||turn.side!=='blue'||$('opponent').value!=='ai')return;
@@ -434,7 +447,7 @@
     state=R.create(draft.picks,draft.first);state.events.push({ply:0,text:`投币：${sideName(draft.first)}先手。`});
     for(const pick of draft.history)state.events.push({ply:0,text:`${sideName(pick.side)} ${pick.slot} 号位选择${R.HEROES[pick.hero].name}`});
     state.events.push({ply:0,text:'双方部署完成。前 3 回合保护生效。'});
-    selected=null;mode='auto';wheelDismissed=false;started=true;shownWinner=false;syncUnits();$('setupDialog').close();resetCamera();renderUI();flashTurn();
+    selected=null;mode='auto';skillKind=null;swapFirst=null;wheelDismissed=false;started=true;shownWinner=false;syncUnits();$('setupDialog').close();resetCamera();renderUI();flashTurn();
     $('opponentStatus').textContent=opponent==='ai'?'电脑对战 · 你执赤方':'同屏双人';rememberPosition();scheduleAI();
   }
   document.addEventListener('contextmenu',e=>{if(touchUI.matches)e.preventDefault();});

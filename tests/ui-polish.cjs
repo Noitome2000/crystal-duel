@@ -25,7 +25,7 @@ const {draftGame}=require('./browser-helpers.cjs');
  await page.locator('[data-hero="dragon"]').click();
  assert.equal(await page.locator('#bluePicks .filled .slot-copy strong').textContent(),'巨龙');
  await page.screenshot({path:'artifacts/draft-selected-rosters.png'});
- await page.locator('[data-hero="knight"]').click();await page.locator('[data-hero="ranger"]').click();await page.locator('#setupDialog').waitFor({state:'hidden'});
+ await page.locator('[data-hero="knight"]').click();await page.locator('[data-hero="ranger"]').click();await page.locator('#startBtn').click();await page.locator('#setupDialog').waitFor({state:'hidden'});
  await page.click('[data-unit="red-mage"]');assert.equal(await page.locator('#wheelUnit').textContent(),'魔术师');
  assert.equal(await page.locator('#redRoster [data-unit="red-mage"] .unit-icon').textContent(),'');
  await page.waitForTimeout(1200);await page.screenshot({path:'artifacts/full-hero-names.png'});

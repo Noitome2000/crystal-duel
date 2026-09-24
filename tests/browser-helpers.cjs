@@ -8,6 +8,9 @@ async function draftGame(page,{mode='local',first='red',confirmBySecondTap=false
     if(mode==='local'||side==='red'){await page.locator(`[data-hero="${picks[side][Math.floor(i/2)]}"]`).click();if(await page.locator('#confirmHero').isVisible()){if(confirmBySecondTap){const done=await page.locator('#draftOrder .done').count();if(done!==i)throw Error('First tap must only preview a hero');await page.locator(`[data-hero="${picks[side][Math.floor(i/2)]}"]`).click();}else await page.locator('#confirmHero').click();}}
     await page.waitForFunction(i=>!document.querySelector('#setupDialog').open||document.querySelectorAll('#draftOrder .done').length>i,i);
   }
+  await page.waitForTimeout(700);
+  if(!await page.locator('#setupDialog').isVisible())throw Error('Draft must wait for explicit entry');
+  await page.locator('#startBtn').click();
   await page.locator('#setupDialog').waitFor({state:'hidden'});
 }
 module.exports={draftGame};

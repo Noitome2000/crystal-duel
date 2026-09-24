@@ -14,9 +14,10 @@ const {draftGame}=require('./browser-helpers.cjs');
  await page.screenshot({path:'artifacts/coin-draft-order.png'});
  const turns=[['靛方',1,'vanguard'],['赤方',1,'general'],['靛方',2,'assassin'],['赤方',2,'knight']];
  for(let i=0;i<4;i++){const [side,slot,hero]=turns[i];assert.match(await page.locator('#draftOrder .current').textContent(),new RegExp(side+' · '+slot+' 号位'));await page.locator(`[data-hero="${hero}"]`).click();await page.waitForFunction(i=>document.querySelectorAll('#draftOrder .done').length>i,i);}
+ await page.waitForTimeout(700);assert.ok(await page.locator('#setupDialog').isVisible());await page.locator('#startBtn').click();
  await page.locator('#setupDialog').waitFor({state:'hidden'});let s=await page.evaluate(()=>GameView.state);assert.equal(s.side,'blue');assert.equal(s.ply,0);assert.equal(s.units.find(u=>u.id==='blue-vanguard').y,1);assert.equal(s.units.find(u=>u.id==='blue-assassin').y,2);
  await page.click('#resetBtn');await draftGame(page,{first:'red'});s=await page.evaluate(()=>GameView.state);assert.equal(s.side,'red');assert.equal(s.ply,0);
  await page.click('#resetBtn');await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);assert.equal(await page.locator('#setupDialog').evaluate(e=>e.scrollWidth<=e.clientWidth),true);
  await page.screenshot({path:'artifacts/coin-draft-mobile.png'});assert.deepEqual(errors,[]);
- console.log('PASS: unselected start, fair coin branches, exact four-pick UI sequence, auto-start with correct side/slots, readable desktop cards, mobile draft width.');
+ console.log('PASS: unselected start, fair coin branches, exact four-pick UI sequence, explicit entry with correct side/slots, readable desktop cards, mobile draft width.');
 }finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

@@ -65,3 +65,9 @@ html,body,body *{-webkit-user-select:none;user-select:none;-webkit-touch-callout
  .toolbar-actions{gap:4px}.toolbar-actions .ghost-btn{font-size:10px;padding:6px;min-height:40px}
 }
 @media(max-width:360px){.match-toolbar{gap:5px}.match-toolbar .top-status{font-size:9px}.toolbar-actions .ghost-btn{padding:5px;font-size:9px}.match-toolbar .turn-chip strong{font-size:18px}}
+
+/* Secondary actions stay in page flow, outside the board and within its width. */
+.controls{flex-wrap:wrap;min-width:0}
+.controls .skill-choices,.touch-skill-choices{flex-basis:100%;min-width:0;max-width:100%;grid-template-columns:minmax(0,1fr)}
+.controls .skill-choices:empty{display:none}
+.controls .skill-choices button,.touch-skill-choices button{min-height:44px;max-width:100%;white-space:normal;overflow-wrap:anywhere;touch-action:manipulation}
