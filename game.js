@@ -435,7 +435,7 @@
     for(const pick of draft.history)state.events.push({ply:0,text:`${sideName(pick.side)} ${pick.slot} 号位选择${R.HEROES[pick.hero].name}`});
     state.events.push({ply:0,text:'双方部署完成。前 3 回合保护生效。'});
     selected=null;mode='auto';wheelDismissed=false;started=true;shownWinner=false;syncUnits();$('setupDialog').close();resetCamera();renderUI();flashTurn();
-    $('opponentStatus').textContent=opponent==='ai'?'● 电脑对战 · 你执赤方　／　离线可玩':'● 本地双人　／　离线可玩';rememberPosition();scheduleAI();
+    $('opponentStatus').textContent=opponent==='ai'?'电脑对战 · 你执赤方':'同屏双人';rememberPosition();scheduleAI();
   }
   document.addEventListener('contextmenu',e=>{if(touchUI.matches)e.preventDefault();});
   $('confirmHero').onclick=()=>pickDraft(inspectedHero);

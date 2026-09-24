@@ -51,3 +51,17 @@ html,body,body *{-webkit-user-select:none;user-select:none;-webkit-touch-callout
  .hero-detail p{font-size:12px;line-height:1.8}
  .hero-card.inspecting{background:#d7bc8326;border-color:var(--gold)}
 }
+
+/* A single game toolbar replaces the brand and promotional banner. */
+.match-toolbar{display:flex;flex-wrap:nowrap;gap:20px;min-height:58px;padding:0 0 12px;margin-bottom:18px}
+.match-toolbar .top-status{display:block;flex:1;min-width:0;font-size:12px;color:#afc5bb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.match-toolbar .turn-chip{display:flex;align-items:center;gap:12px;min-width:0;border:0;padding:0;text-align:left;white-space:nowrap}
+.match-toolbar .turn-chip>span{font-size:11px}.match-toolbar .turn-chip>div{display:flex;align-items:center;gap:8px;margin:0}.match-toolbar .turn-chip strong{font-size:26px}
+.toolbar-actions{display:flex;gap:8px;flex-shrink:0}.toolbar-actions .ghost-btn{white-space:nowrap;min-height:40px}
+@media(max-width:760px){
+ .match-toolbar{gap:8px;min-height:48px;padding-bottom:8px;margin-bottom:10px}
+ .match-toolbar .top-status{font-size:10px}.match-toolbar .turn-chip{gap:5px}.match-toolbar .turn-chip>span{display:none}
+ .match-toolbar .turn-chip strong{font-size:20px}.match-toolbar .turn-chip div span{font-size:10px}.match-toolbar .turn-chip>div{gap:4px}
+ .toolbar-actions{gap:4px}.toolbar-actions .ghost-btn{font-size:10px;padding:6px;min-height:40px}
+}
+@media(max-width:360px){.match-toolbar{gap:5px}.match-toolbar .top-status{font-size:9px}.toolbar-actions .ghost-btn{padding:5px;font-size:9px}.match-toolbar .turn-chip strong{font-size:18px}}

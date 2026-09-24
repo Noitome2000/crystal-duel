@@ -161,3 +161,5 @@
   .hero-art { width:27px; height:27px; margin-bottom:2px; }
   .hero-detail { min-height:88px; height:88px; }
 }
+
+.hero-detail{height:auto;min-height:112px}.hero-detail p{overflow-wrap:anywhere}
