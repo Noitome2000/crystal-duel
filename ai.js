@@ -8,7 +8,8 @@
     if(s.winner)return [];
     const out=[];
     for(const u of s.units)for(const mode of ['attack','skill','move'])for(const opt of R.legal(s,u.id,mode))out.push({type:'act',id:u.id,mode,opt});
-    if(['combo','dodge','retreat'].includes(s.phase))out.push({type:'decline'});
+    // Use an available dodge rather than deliberately sacrificing the ranger.
+    if(['combo','retreat'].includes(s.phase)||s.phase==='dodge'&&!out.some(a=>a.opt.kind==='dodge'))out.push({type:'decline'});
     if(!out.length&&s.phase==='normal')out.push({type:'pass'});
     return out;
   }

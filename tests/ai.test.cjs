@@ -8,6 +8,12 @@ test('AI takes immediate win',async()=>{const s=board(unit('b','blue',1,1,'knigh
 test('AI avoids unnecessary friendly capture by wolf',async()=>{const s=board(unit('b','blue',1,1,'wolf'),unit('friend','blue',3,1),unit('enemy','red',1,3));const {action}=await AI.choose(s,budget);assert.equal(action.opt.target,'enemy');});
 test('AI recognizes that the defender controls a ranger reaction',async()=>{const s=board(unit('a','red',1,1,'knight'),unit('r','blue',3,1,'ranger'));s.side='red';R.apply(s,'a','attack',R.legal(s,'a','attack')[0]);assert.equal(s.phase,'dodge');assert.equal(AI.owner(s),'blue');const {action}=await AI.choose(s,budget);assert.equal(action.type,'act');assert.equal(action.opt.kind,'dodge');assert.equal(R.get(AI.next(s,action),'r').alive,true);});
 test('human ranger response remains human even during computer attacking turn',()=>{const s=board(unit('a','blue',1,1,'knight'),unit('r','red',3,1,'ranger'));R.apply(s,'a','attack',R.legal(s,'a','attack')[0]);assert.equal(AI.owner(s),'red');});
+test('AI attempts legal ranger dodge even when search predicts a losing continuation',async()=>{
+ const s=board(unit('a','red',1,1,'pikeman'),unit('r','blue',3,1,'ranger'),unit('other','blue',4,3));s.side='red';
+ R.apply(s,'a','attack',R.legal(s,'a','attack').find(o=>o.target==='r'));
+ assert.ok(AI.actions(s).length);assert.ok(AI.actions(s).every(a=>a.opt?.kind==='dodge'));
+ for(const limits of [{maxNodes:1,timeMs:1},budget]){const {action}=await AI.choose(s,limits);assert.equal(action.opt.kind,'dodge');assert.ok(R.get(AI.next(s,action),'r').alive);}
+});
 test('AI pursues a dodged ranger from the attack destination with the same soldier',async()=>{
  const s=board(unit('a','blue',1,0),unit('r','red',3,1,'ranger'),unit('other','blue',1,3));
  R.apply(s,'a','attack',R.legal(s,'a','attack').find(o=>o.target==='r'));

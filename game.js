@@ -2,7 +2,7 @@
 (() => {
   'use strict';
   const R=window.Rules,$=id=>document.getElementById(id),sideName=s=>s==='red'?'赤方':'靛方';
-  let state=R.create(),selected=null,mode='move',skillKind=null,started=false,locked=false;
+  let state=R.create(),selected=null,mode='auto',skillKind=null,started=false,locked=false;
   const skillNames={push:'推进',speed:'神速',vault:'陷阵',teleport:'瞬移',swap:'移形',charge:'轰炸·蓄力',bomb:'轰炸',dodge:'瞬闪',retreat:'游击'};
   let draft=GameDraft.create(),draftBusy=false,draftEpoch=0,draftTimer=null;
   let opponent='ai',aiBusy=false,aiTimer=null,aiEpoch=0,aiError=false,wheelOpen=true,wheelDismissed=false;
@@ -93,16 +93,17 @@
   function syncUnits(){for(const [id,g] of meshes)if(!R.get(state,id)?.alive){unitGroup.remove(g);dispose(g);meshes.delete(id);}for(const u of state.units.filter(u=>u.alive)){if(!meshes.has(u.id)){const m=makeUnit(u);meshes.set(u.id,m);unitGroup.add(m);}const g=meshes.get(u.id);g.position.copy(vec(u.x,u.y));g.scale.setScalar(1);}}
   function frame(now){requestAnimationFrame(frame);for(let i=tweens.length-1;i>=0;i--){const t=tweens[i],p=Math.max(0,Math.min(1,(now-t.start)/t.duration));try{t.step(p);}catch(error){tweens.splice(i,1);t.fail(error);continue;}if(p===1){tweens.splice(i,1);t.done();}}overlay.children.forEach(o=>{if(o.userData.pulse)o.material.opacity=.60+(reduced?0:Math.sin(now*.004)*.10);});renderer.render(scene,camera);positionWheel();}
   function tween(duration,step){return new Promise((done,fail)=>tweens.push({start:performance.now(),duration:reduced?1:duration,step,done,fail}));}
-  function options(){return selected?R.legal(state,selected,mode).filter(o=>mode!=='skill'||!skillKind||o.kind===skillKind):[];}
+  function legalMode(id,m){return m==='auto'?[...R.legal(state,id,'move'),...R.legal(state,id,'attack')]:R.legal(state,id,m);}
+  function options(){return selected?legalMode(selected,mode).filter(o=>mode!=='skill'||!skillKind||o.kind===skillKind):[];}
   function highlight(){clear(overlay);clearPath();const u=R.get(state,selected);if(u?.alive){const ring=add(overlay,new THREE.TorusGeometry(.40,.018,6,48),new THREE.MeshBasicMaterial({color:0xf3d291}),u.x,.13,u.y);ring.rotation.x=Math.PI/2;}
     if(state.phase==='dodge'&&state.pending){const a=R.get(state,state.pending.actor);const marker=add(overlay,new THREE.TorusGeometry(.46,.045,8,48),new THREE.MeshBasicMaterial({color:0xff6644,depthTest:false}),a.x,.18,a.y);marker.rotation.x=Math.PI/2;const text=label('攻击者','#ffb090',.26);text.position.copy(vec(a.x,a.y,1.48));overlay.add(text);}
     const seen=new Set();for(const o of options()){const cells=o.kind==='swap'?[R.get(state,o.a),R.get(state,o.b)]:[o];for(const c of cells){
       const k=R.key(c);if(seen.has(k))continue;seen.add(k);
-      const color=mode==='attack'?0xff533b:mode==='skill'?0xffd35c:0x3dffb6;
+      const color=o.kind==='attack'?0xff533b:mode==='skill'?0xffd35c:0x3dffb6;
       const fill=add(overlay,new THREE.BoxGeometry(.83,.012,.83),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.6,depthWrite:false}),c.x,.105,c.y);fill.userData.pulse=true;
       // A bright square frame stays legible against every tile and around occupied targets.
       for(const [x,z,w,d] of [[-.43,0,.035,.89],[.43,0,.035,.89],[0,-.43,.89,.035],[0,.43,.89,.035]])add(overlay,new THREE.BoxGeometry(w,.018,d),new THREE.MeshBasicMaterial({color,depthWrite:false}),c.x+x,.13,c.y+z);
-      const mark=label(mode==='attack'?'攻击':mode==='skill'?'技能':'落点',mode==='attack'?'#ffdbcf':'#d9ffef',.16);mark.position.copy(vec(c.x,c.y+.30,.19));overlay.add(mark);
+      const mark=label(o.kind==='attack'?'攻击':mode==='skill'?'技能':'落点',o.kind==='attack'?'#ffdbcf':'#d9ffef',.16);mark.position.copy(vec(c.x,c.y+.30,.19));overlay.add(mark);
     }}}
 
   function clearPath(){if(locked)return;if(pathGroup)clear(pathGroup);hoverKey='';if(state.phase==='dodge'&&state.pending)drawPath(state.pending.opt);}
@@ -111,7 +112,7 @@
   function hit(e){const r=renderer.domElement.getBoundingClientRect(),ray=new THREE.Raycaster();ray.setFromCamera(new THREE.Vector2((e.clientX-r.left)/r.width*2-1,1-(e.clientY-r.top)/r.height*2),camera);const hits=ray.intersectObjects([...meshes.values(),...tileMeshes],true);for(const h of hits){let obj=h.object;while(obj&&!obj.userData.unitId&&!obj.userData.cell)obj=obj.parent;if(obj?.userData.unitId){const u=R.get(state,obj.userData.unitId);if(!u?.alive)continue;return {x:u.x,y:u.y,unit:u};}if(obj?.userData.cell){const c=obj.userData.cell;return {...c,unit:R.at(state,c.x,c.y)};}}return null;}
   function preview(e){if(locked||!started||isAITurn()||anyDialog())return;const h=hit(e),k=h?R.key(h):'';if(k===hoverKey)return;const o=h&&options().find(o=>o.x===h.x&&o.y===h.y);showPath(o);hoverKey=k;renderer.domElement.style.cursor=o||h?.unit?'pointer':'grab';}
   function pick(e){if(locked||!started||state.winner||isAITurn())return;const h=hit(e);if(!h){dismissWheel();return;}const o=options().find(o=>o.x===h.x&&o.y===h.y&&o.kind!=='swap');if(o){perform(o);return;}if(h.unit)select(h.unit.id);else dismissWheel();}
-  function select(id){if(locked||!started||state.winner||isAITurn())return;const u=R.get(state,id);if(!u?.alive)return;if(state.phase==='dodge'){if(id!==state.pending.target)return toast('由防守方为游侠选择瞬闪，或承受攻击');}else if(u.side!==state.side)return toast(`现在轮到${sideName(state.side)}`);else if(state.actor&&id!==state.actor)return toast('请先完成当前单位的后续行动');selected=id;skillKind=null;wheelOpen=true;wheelDismissed=false;mode=state.phase==='combo'?'attack':state.phase==='bomb'?'skill':'move';renderUI();}
+  function select(id){if(locked||!started||state.winner||isAITurn())return;const u=R.get(state,id);if(!u?.alive)return;if(state.phase==='dodge'){if(id!==state.pending.target)return toast('由防守方为游侠选择瞬闪，或承受攻击');}else if(u.side!==state.side)return toast(`现在轮到${sideName(state.side)}`);else if(state.actor&&id!==state.actor)return toast('请先完成当前单位的后续行动');selected=id;skillKind=null;wheelOpen=true;wheelDismissed=false;mode=state.phase==='bomb'?'skill':'auto';renderUI();}
   function ghost(g,opacity=.32){
     const copy=g.clone(true);copy.traverse(o=>{if(o.isSprite)o.visible=false;if(o.geometry)o.geometry=o.geometry.clone();if(o.material){o.material=o.material.clone();o.material.map=null;o.material.transparent=true;o.material.opacity=opacity;o.material.depthWrite=false;}});particles.add(copy);return copy;
   }
@@ -177,10 +178,10 @@
     }
     if(pathGroup)clear(pathGroup);syncUnits();
   }
-  async function perform(opt,byAI=false){if(locked||(!byAI&&isAITurn()))return;const before=state.units.map(u=>({...u})),oldPly=state.ply;locked=true;setDisabled();try{const result=R.apply(state,selected,mode,opt);await animateResult(before,result);if(result.kind!=='reaction'&&!R.protectedOpening(state)){for(const strategist of state.units.filter(u=>u.alive&&u.hero==='strategist')){const affected=state.units.some(u=>u.alive&&u.side!==strategist.side&&((u.x===strategist.x&&Math.abs(u.y-strategist.y)===2)||(u.y===strategist.y&&Math.abs(u.x-strategist.x)===2))&&!R.trapped({...state,units:before},before.find(b=>b.id===u.id)));if(affected)await skillBurst(strategist.id,'设陷');}}adoptPhase();}catch(e){console.error(e);clear(particles);clear(pathGroup);world.position.set(0,0,0);syncUnits();adoptPhase();toast('动画已恢复：'+e.message);}finally{locked=false;renderUI();if(state.ply!==oldPly)flashTurn();showWin();rememberPosition();scheduleAI();}}
-  function adoptPhase(){skillKind=null;wheelOpen=true;wheelDismissed=false;if(state.phase==='dodge'){selected=state.pending.target;mode='move';}else if(state.actor){selected=state.actor;mode=state.phase==='combo'?'attack':state.phase==='bomb'?'skill':'move';}else{selected=null;mode='move';}}
+  async function perform(opt,byAI=false){if(locked||(!byAI&&isAITurn()))return;const before=state.units.map(u=>({...u})),oldPly=state.ply;locked=true;setDisabled();try{const result=R.apply(state,selected,mode==='auto'?(opt.kind==='attack'?'attack':'move'):mode,opt);await animateResult(before,result);if(result.kind!=='reaction'&&!R.protectedOpening(state)){for(const strategist of state.units.filter(u=>u.alive&&u.hero==='strategist')){const affected=state.units.some(u=>u.alive&&u.side!==strategist.side&&((u.x===strategist.x&&Math.abs(u.y-strategist.y)===2)||(u.y===strategist.y&&Math.abs(u.x-strategist.x)===2))&&!R.trapped({...state,units:before},before.find(b=>b.id===u.id)));if(affected)await skillBurst(strategist.id,'设陷');}}adoptPhase();}catch(e){console.error(e);clear(particles);clear(pathGroup);world.position.set(0,0,0);syncUnits();adoptPhase();toast('动画已恢复：'+e.message);}finally{locked=false;renderUI();if(state.ply!==oldPly)flashTurn();showWin();rememberPosition();scheduleAI();}}
+  function adoptPhase(){skillKind=null;wheelOpen=true;wheelDismissed=false;if(state.phase==='dodge'){selected=state.pending.target;mode='auto';}else if(state.actor){selected=state.actor;mode=state.phase==='bomb'?'skill':'auto';}else{selected=null;mode='auto';}}
   async function finishChoice(byAI=false){if(locked||(!byAI&&isAITurn()))return;const before=state.units.map(u=>({...u})),oldPly=state.ply,p=state.pending;locked=true;setDisabled();try{if(state.phase==='normal')R.pass(state);else R.decline(state);if(p)await animateResult(before,{kind:'attack',opt:p.opt,actor:p.actor});adoptPhase();}catch(e){console.error(e);clear(particles);clear(pathGroup);world.position.set(0,0,0);syncUnits();adoptPhase();toast('动画已恢复：'+e.message);}finally{locked=false;renderUI();if(state.ply!==oldPly)flashTurn();showWin();rememberPosition();scheduleAI();}}
-  function setDisabled(){document.querySelectorAll('.action,.touch-action').forEach(b=>{const m=b.dataset.action||b.dataset.command;b.disabled=locked||isAITurn()||!started||!selected||!!state.winner||!R.legal(state,selected,m).some(o=>!b.dataset.skill||o.kind===b.dataset.skill);b.title=b.disabled?(R.protectedOpening(state)&&m==='attack'?'开局保护中，暂不能攻击':'当前没有合法的'+({move:'移动',attack:'攻击',skill:'技能'}[m])+'目标'):({move:'移动 · 1',attack:'攻击 · 2',skill:'技能 · 3'}[m]);if(b.dataset.skill)b.title=skillNames[b.dataset.skill]+(b.disabled?' · 当前不可用':'');b.classList.toggle('active',m===mode&&(m!=='skill'||b.dataset.skill===skillKind));});$('finishBtn').disabled=locked||isAITurn();$('resetBtn').disabled=locked;document.querySelectorAll('.skill-choices button,.touch-skill-choices button,.unit-row').forEach(b=>b.disabled=locked||isAITurn());positionWheel();}
+  function setDisabled(){document.querySelectorAll('.action,.touch-action').forEach(b=>{const m=b.dataset.action||b.dataset.command;b.disabled=locked||isAITurn()||!started||!selected||!!state.winner||!legalMode(selected,m).some(o=>!b.dataset.skill||o.kind===b.dataset.skill);b.title=b.disabled?(R.protectedOpening(state)&&m==='attack'?'开局保护中，暂不能攻击':'当前没有合法的'+({auto:'移动或攻击',move:'移动',attack:'攻击',skill:'技能'}[m])+'目标'):({auto:'点击绿格移动，红色目标攻击',move:'移动',attack:'攻击',skill:'技能'}[m]);if(b.dataset.skill)b.title=skillNames[b.dataset.skill]+(b.disabled?' · 当前不可用':'');b.classList.toggle('active',m===mode&&(m!=='skill'||b.dataset.skill===skillKind));});$('finishBtn').disabled=locked||isAITurn();$('resetBtn').disabled=locked;document.querySelectorAll('.skill-choices button,.touch-skill-choices button,.unit-row').forEach(b=>b.disabled=locked||isAITurn());positionWheel();}
   function renderUI(){
     buildWheel();
     document.body.dataset.side=state.side;$('turnNumber').textContent=String(Math.floor(state.ply/2)+1).padStart(2,'0');$('turnSide').textContent=state.winner?'对局结束':sideName(state.side)+'行动';
@@ -192,9 +193,9 @@
         const b=document.createElement('button');b.className='unit-row'+(!u.alive?' dead':'')+(u.id===selected?' selected':'');b.dataset.unit=u.id;const def=R.HEROES[u.hero];b.innerHTML=`<span class="unit-icon ${side}">${def?heroPortrait(u.hero):'兵'}</span><span class="unit-name">${u.name}<span class="unit-type">${def?.skill||'移动一格 · 攻击三格'}</span></span><span class="status-tag">${!u.alive?'退场':u.charged?'蓄力':R.trapped(state,u)?'受困':!R.ready(state,u)?'冷却':''}</span>`;b.onclick=()=>{if(locked||isAITurn())return;const o=options().find(o=>o.x===u.x&&o.y===u.y&&o.kind!=='swap');if(o)perform(o);else select(u.id);};roster.appendChild(b);
       }$(side+'Count').textContent=`${state.units.filter(u=>u.alive&&u.side===side).length} / 6`;
     }
-    const u=R.get(state,selected);$('selectedCard').innerHTML=u?`<div class="selected-name">${u.name} <small>· ${String.fromCharCode(65+u.x)}${u.y+1}</small></div><div class="selected-desc">${R.HEROES[u.hero]?.desc||'移动一格；攻击恰好三格，可转弯，不穿越单位或重复经过格子。'}${R.trapped(state,u)?'<br>受到设陷：移动与攻击被封锁，跳跃仍可用。':''}</div>`:`<div class="empty-selection">点击己方棋子选择单位。<br>${touchUI.matches?'在棋盘下方选择行动，再点亮起的落点。':'悬停高亮落点，预览行进路径。'}</div>`;
+    const u=R.get(state,selected);$('selectedCard').innerHTML=u?`<div class="selected-name">${u.name} <small>· ${String.fromCharCode(65+u.x)}${u.y+1}</small></div><div class="selected-desc">${R.HEROES[u.hero]?.desc||'移动一格；攻击恰好三格，可转弯，不穿越单位或重复经过格子。'}${R.trapped(state,u)?'<br>受到设陷：移动与攻击被封锁，跳跃仍可用。':''}</div>`:`<div class="empty-selection">点击己方棋子选择单位。<br>${touchUI.matches?'直接点绿格移动，点红色目标攻击；其他技能在棋盘下方选择。':'悬停高亮落点，预览行进路径。'}</div>`;
     const help={combo:'连击锁定当前单位。普通连击只能继续吃士兵；斩将可继续吃英雄。',dodge:`${state.pending?describe(R.get(state,state.pending.actor)):''} 正在攻击游侠（橙色圆环与路径）。请选择绿色落点瞬闪，或承受攻击；之后原攻击棋子在攻击落点继续行动。`,retreat:'游侠完成攻击，可移动一格，或点击“结束行动”。',bomb:'巨龙必须完成轰炸：点击横纵零至三格内的落点，包括自己所在格。'};
-    $('actionHelp').textContent=state.winner?'对局已结束，可查看棋盘或重新部署。':help[state.phase]||(!u?'选择己方单位。高亮格表示当前行动的合法落点。':mode==='attack'?(touchUI.matches?'攻击必须走满距离。点红色高亮目标完成攻击。':'攻击必须走满距离。悬停目标预览路径，点击目标完成攻击。'):mode==='skill'?'选择高亮格发动技能；移形需要在下方选择要交换的两个单位。':`${u.name}：点击高亮格移动一格。${R.protectedOpening(state)?'开局只能移动，陷阵与神速例外。':''}`);
+    $('actionHelp').textContent=state.winner?'对局已结束，可查看棋盘或重新部署。':help[state.phase]||(!u?'选择己方单位，绿格可移动，红色目标可攻击。':mode==='attack'?(touchUI.matches?'攻击必须走满距离。点红色高亮目标完成攻击。':'攻击必须走满距离。悬停目标预览路径，点击目标完成攻击。'):mode==='skill'?'选择高亮格发动技能；移形需要在下方选择要交换的两个单位。':`${u.name}：点击绿色空格移动，点击红色目标攻击。${R.protectedOpening(state)?'开局只能移动，陷阵与神速例外。':''}`);
     $('skillChoices').innerHTML='';$('touchSkillChoices').innerHTML='';$('touchSkillChoices').hidden=!touchUI.matches||mode!=='skill';if(mode==='skill')for(const o of options().filter(o=>['swap','charge'].includes(o.kind))){const b=document.createElement('button');b.textContent=o.kind==='charge'?'轰炸 · 开始蓄力':`${describe(R.get(state,o.a))} ⇄ ${describe(R.get(state,o.b))}`;b.onclick=()=>perform(o);(touchUI.matches?$('touchSkillChoices'):$('skillChoices')).appendChild(b);}
     const optional=['combo','dodge','retreat'].includes(state.phase),noAction=!state.winner&&state.phase==='normal'&&!R.hasActions(state);$('finishBtn').hidden=!optional&&!noAction;$('finishBtn').textContent=state.phase==='dodge'?'承受攻击':state.phase==='combo'?'结束连击':noAction?'无行动 · 交接回合':'结束行动';
     $('log').innerHTML=state.events.slice(-25).reverse().map(e=>`<div class="log-entry"><span>${String(Math.floor(e.ply/2)+1).padStart(2,'0')}</span>${e.text}</div>`).join('');setDisabled();highlight();updateWheel();if(isAITurn()&&!state.winner){$('boardStatus').textContent=aiError?'电脑暂未完成行动，请重新部署重试':'靛方 · 正在思考';$('actionHelp').textContent=state.phase==='dodge'?'电脑正在为游侠选择防守方式。':'电脑正在权衡行动。你可以拖动棋盘查看局面。';}$('boardStatus').classList.toggle('ai-thinking',isAITurn()&&!aiError);
@@ -206,7 +207,7 @@
     clearPath();renderUI();
   }
   function buildWheel(){
-    const entries=[{mode:'move',name:state.phase==='dodge'?'瞬闪':state.phase==='retreat'?'游击':'移动',icon:'↟'},{mode:'attack',name:'攻击',icon:'⚔'}];
+    const entries=[{mode:'auto',name:state.phase==='dodge'?'瞬闪':state.phase==='retreat'?'游击':state.phase==='combo'?'连击':'行动',icon:'↟'}];
     const kinds=[...new Set(selected?R.legal(state,selected,'skill').map(o=>o.kind):[])];
     if(mode==='skill'&&!kinds.includes(skillKind))skillKind=kinds[0]||null;
     for(const kind of kinds)entries.push({mode:'skill',kind,name:kind==='charge'?'轰炸':skillNames[kind],icon:'✦'});
@@ -223,7 +224,7 @@
   function updateWheel(){
     const u=R.get(state,selected);$('actionWheel').classList.toggle('collapsed',!wheelOpen);
     $('wheelUnit').textContent=u?.type==='hero'?R.HEROES[u.hero].name:'士兵';
-    $('wheelMode').textContent=wheelOpen?'选择行动':{move:'移动 ↗',attack:'攻击 ↗',skill:(skillNames[skillKind]||'选择落点')+' ↗'}[mode];
+    $('wheelMode').textContent=wheelOpen?'选择行动':{auto:'移动 / 攻击',move:'移动 ↗',attack:'攻击 ↗',skill:(skillNames[skillKind]||'选择落点')+' ↗'}[mode];
     $('wheelToggle').setAttribute('aria-expanded',String(wheelOpen));
     positionWheel();
   }
@@ -236,7 +237,7 @@
     // Project the ring on the board plane, centred on the actual base, not the head.
     const box=$('scene'),project=(x,y)=>{const p=vec(x,y,.12).project(camera);return {x:(p.x+1)*box.clientWidth/2,y:(1-p.y)*box.clientHeight/2};};
     const center=project(u.x,u.y),edge=project(u.x+Math.cos(orbit.yaw),u.y-Math.sin(orbit.yaw));
-    const scale=THREE.MathUtils.clamp(74/Math.hypot(edge.x-center.x,edge.y-center.y),.65,1.05);
+    const scale=THREE.MathUtils.clamp(74/Math.hypot(edge.x-center.x,edge.y-center.y),.60,.78);
     el.style.transform=`translate3d(${center.x-90}px,${center.y-90}px,0)`;
     const point=(radius,angle)=>{const p=project(u.x+Math.cos(angle+orbit.yaw)*radius*scale,u.y-Math.sin(angle+orbit.yaw)*radius*scale);return {x:90+p.x-center.x,y:90+p.y-center.y};};
     el.querySelectorAll('.action').forEach(button=>{
@@ -293,7 +294,7 @@
     wolf:'<path d="M14 14 26 22H38L50 14 46 42 32 54 18 42Z"/><path d="M22 31 27 34M42 31 37 34M28 42H36L32 46Z"/>'
   };
   function heroPortrait(id){return `<svg class="hero-portrait" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${heroArt[id]||''}</svg>`;}
-  let inspectedHero='general';
+  let inspectedHero='general',touchDraftCandidate=null;
   function inspectHero(id){
     inspectedHero=id;const h=R.HEROES[id];
     const turn=GameDraft.current(draft),allowed=turn&&!draftBusy&&!(turn.side==='blue'&&$('opponent').value==='ai')&&!draft.picks[turn.side].includes(id);
@@ -303,6 +304,7 @@
   }
   function resetDraft(){draftEpoch++;clearTimeout(draftTimer);draftTimer=null;draft=GameDraft.create();draftBusy=false;inspectedHero='general';renderDraft();}
   function renderDraft(){
+    touchDraftCandidate=null;
     const turn=GameDraft.current(draft),computer=turn?.side==='blue'&&$('opponent').value==='ai';
     $('opponent').disabled=draft.stage!=='coin'||draftBusy;
     $('tossBtn').hidden=draft.stage!=='coin';$('tossBtn').disabled=draftBusy;
@@ -326,7 +328,7 @@
       const picked=draft.history.filter(p=>p.hero===id);
       b.setAttribute('aria-label',`${h.name}，${h.skill}${chosen?'，己方已选':''}`);
       b.innerHTML=`<span class="hero-art">${heroPortrait(id)}</span><strong>${h.name}</strong><small>${heroRoles[id]}</small><span class="picked-tags">${picked.map(p=>`<span class="picked-tag ${p.side}">${sideName(p.side)} ${p.slot}</span>`).join('')}</span>`;
-      b.onmouseenter=()=>inspectHero(id);b.onfocus=()=>inspectHero(id);b.onclick=()=>{inspectHero(id);if(!touchUI.matches)pickDraft(id);};$('heroGrid').appendChild(b);
+      b.onmouseenter=()=>inspectHero(id);b.onfocus=()=>inspectHero(id);b.onclick=()=>{if(!touchUI.matches){inspectHero(id);pickDraft(id);return;}if(touchDraftCandidate===id){touchDraftCandidate=null;pickDraft(id);return;}touchDraftCandidate=id;inspectHero(id);$('heroDetail').scrollIntoView({block:'nearest',behavior:reduced?'instant':'smooth'});};$('heroGrid').appendChild(b);
     }
     inspectHero(inspectedHero);
     $('draftHint').textContent=draft.stage==='ready'?`部署完成，${sideName(draft.first)}即将行动。`:turn?`${computer?'电脑正在选择': '请选择'} ${sideName(turn.side)} ${turn.slot} 号位英雄`:'投币后按顺序选将，1 号位在上，2 号位在下。';
@@ -356,16 +358,17 @@
     state=R.create(draft.picks,draft.first);state.events.push({ply:0,text:`投币：${sideName(draft.first)}先手。`});
     for(const pick of draft.history)state.events.push({ply:0,text:`${sideName(pick.side)} ${pick.slot} 号位选择${R.HEROES[pick.hero].name}`});
     state.events.push({ply:0,text:'双方部署完成。前 3 回合保护生效。'});
-    selected=null;mode='move';wheelDismissed=false;started=true;shownWinner=false;syncUnits();$('setupDialog').close();resetCamera();renderUI();flashTurn();
+    selected=null;mode='auto';wheelDismissed=false;started=true;shownWinner=false;syncUnits();$('setupDialog').close();resetCamera();renderUI();flashTurn();
     $('opponentStatus').textContent=opponent==='ai'?'● 电脑对战 · 你执赤方　／　离线可玩':'● 本地双人　／　离线可玩';rememberPosition();scheduleAI();
   }
+  document.addEventListener('contextmenu',e=>{if(touchUI.matches)e.preventDefault();});
   $('confirmHero').onclick=()=>pickDraft(inspectedHero);
   $('tossBtn').onclick=tossCoin;$('opponent').onchange=renderDraft;
   $('startBtn').onclick=start;$('cancelSetup').onclick=()=>{draftEpoch++;clearTimeout(draftTimer);$('setupDialog').close();};$('setupDialog').addEventListener('cancel',e=>{if(!started)e.preventDefault();else{draftEpoch++;clearTimeout(draftTimer);}});$('resetBtn').onclick=openSetup;$('finishBtn').onclick=()=>finishChoice();$('cameraBtn').onclick=resetCamera;$('rulesBtn').onclick=()=>{pauseAI();$('rulesDialog').showModal();};$('closeRules').onclick=()=>$('rulesDialog').close();$('againBtn').onclick=()=>{$('winDialog').close();openSetup();};$('reviewBtn').onclick=()=>$('winDialog').close();
   $('heroManual').innerHTML=Object.values(R.HEROES).map(h=>`<div><strong>${h.name} · ${h.skill}</strong>${h.desc}</div>`).join('');
   buildWheel();$('wheelToggle').onclick=()=>{wheelOpen=!wheelOpen;updateWheel();};
   for(const id of ['setupDialog','rulesDialog'])$(id).addEventListener('close',scheduleAI);
-  document.addEventListener('keydown',e=>{if(anyDialog()||locked||isAITurn()||e.ctrlKey||e.altKey||e.metaKey)return;const button=/^[1-9]$/.test(e.key)&&document.querySelectorAll('.action')[Number(e.key)-1];if(button){button.click();e.preventDefault();}if(e.key==='Escape')dismissWheel();});
+  document.addEventListener('keydown',e=>{if(anyDialog()||locked||isAITurn()||e.ctrlKey||e.altKey||e.metaKey)return;const button=/^[1-9]$/.test(e.key)&&document.querySelectorAll('.action')[Number(e.key)<=2?0:Number(e.key)-2];if(button){button.click();e.preventDefault();}if(e.key==='Escape')dismissWheel();});
   document.addEventListener('click',e=>{if(!e.target.closest('.board-wrap,button,select,dialog,.unit-list'))dismissWheel();});
   try{boot();renderUI();openSetup();}catch(e){console.error(e);$('bootError').hidden=false;$('bootError').textContent='三维场景无法启动。请使用启用硬件加速的 Edge / Chrome 浏览器，并保留 vendor 文件夹。';}
   // Read-only geometry helpers for automated click tests; no gameplay backdoor.

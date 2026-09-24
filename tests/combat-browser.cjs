@@ -23,11 +23,11 @@ const board=(...units)=>({...R.create(),units,ply:6});
   });
  }
  async function cell(x,y){const p=await page.evaluate(([x,y])=>GameView.project(x,y),[x,y]);await page.mouse.click(p.x,p.y);}
- async function choice(kind){await page.locator(`[data-${kind==='move'||kind==='attack'?'action':'skill'}="${kind}"] .sector-label`).click();}
+ async function choice(kind){if(kind==='move'||kind==='attack')kind='auto';await page.locator(`[data-${kind==='auto'?'action':'skill'}="${kind}"] .sector-label`).click();}
  await fixture(board(unit('s','red',2,1),unit('g','red',1,1,'general'),unit('k','red',1,2,'knight'),unit('e','blue',3,1),unit('last','blue',4,3)));
  await page.click('[data-unit="s"]');
- assert.deepEqual(await page.locator('.action b').allTextContents(),['移动','攻击','推进','神速']);
- assert.equal(new Set(await page.locator('.action').evaluateAll(bs=>bs.map(b=>b.style.clipPath))).size,4);
+ assert.deepEqual(await page.locator('.action b').allTextContents(),['行动','推进','神速']);
+ assert.equal(new Set(await page.locator('.action').evaluateAll(bs=>bs.map(b=>b.style.clipPath))).size,3);
  await page.waitForFunction(()=>!document.querySelector('#turnFlash').classList.contains('show'));
  await page.screenshot({path:'artifacts/multiple-skills-wheel.png'});
  await choice('speed');await cell(2,3);await page.waitForFunction(()=>!GameView.locked&&GameView.state.ply===7);
@@ -35,7 +35,8 @@ const board=(...units)=>({...R.create(),units,ply:6});
  assert.ok(await page.evaluate(()=>framesSeen.some(f=>f.labels.includes('神速'))));
  await fixture(board(unit('a','red',1,0),unit('b','blue',3,1),unit('last','blue',4,3)));
  await page.click('[data-unit="a"]');assert.equal(await page.locator('[data-action="skill"]').count(),0);
- await choice('attack');await cell(3,1);await page.waitForFunction(()=>!GameView.locked&&GameView.state.units.find(u=>u.id==='b').alive===false);
+ await page.waitForFunction(()=>framesSeen.some(f=>f.labels.includes('攻击')&&f.labels.includes('落点')));
+ await cell(3,1);await page.waitForFunction(()=>!GameView.locked&&GameView.state.units.find(u=>u.id==='b').alive===false);
  assert.ok(await page.evaluate(()=>framesSeen.some(f=>f.effects.includes('impact-slash'))),'capture shows impact effect');
  const frames=await page.evaluate(()=>framesSeen.filter(f=>f.units.a));
  assert.ok(frames.some(f=>f.units.a.x>1.15&&f.units.a.x<1.85),'attack travels through intermediate positions');

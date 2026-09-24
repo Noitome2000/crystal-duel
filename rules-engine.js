@@ -4,7 +4,7 @@
   const DIRS = [[1,0],[-1,0],[0,1],[0,-1]];
   const HEROES = {
     general:{name:'将军',skill:'推进 / 军号',desc:'推动相邻敌人一格。周围八格的己方士兵共享此能力与冷却。被推动者下一回合不能反推。'},
-    strategist:{name:'军师',skill:'设陷',desc:'同一横排或纵列、恰好两格外的敌人不能移动和攻击；跳跃不受限制。'},
+    strategist:{name:'军师',skill:'设陷',desc:'同一横排或纵列、恰好两格外的敌人不能移动和攻击，游侠的瞬闪、游击也被限制；跳跃不受限制。'},
     vanguard:{name:'先锋',skill:'陷阵 / 斩将',desc:'跳过一个相邻单位。开局可用；击破英雄后也能连击，并可连续攻击英雄。'},
     assassin:{name:'刺客',skill:'瞬移 / 短兵',desc:'跳跃到任意空格。攻击距离固定为一格。'},
     ranger:{name:'游侠',skill:'瞬闪 / 游击',desc:'被攻击前可闪避一格，原攻击者到达攻击落点后重选行动；本次重行动不能再次闪避。攻击及连击结束后可移动一格。'},
@@ -79,7 +79,7 @@
   }
   function legal(s,id,mode='move'){
     const u=get(s,id);if(!u?.alive||s.winner)return [];
-    if(s.phase==='dodge')return id===s.pending.target&&mode==='move'?paths(s,u,[1]).map(c=>({...c,kind:'dodge'})):[];
+    if(s.phase==='dodge')return id===s.pending.target&&mode==='move'&&!trapped(s,u)?paths(s,u,[1]).map(c=>({...c,kind:'dodge'})):[];
     if(u.side!==s.side||(s.actor&&id!==s.actor))return [];
     if(s.phase==='bomb')return mode==='skill'?CELLS.filter(c=>(c.x===u.x||c.y===u.y)&&Math.abs(c.x-u.x)+Math.abs(c.y-u.y)<=3).map(c=>jump(u,c,'bomb')):[];
     if(s.phase==='retreat')return mode==='move'&&!trapped(s,u)?paths(s,u,[1]).map(c=>({...c,kind:'retreat'})):[];
@@ -120,7 +120,7 @@
     const u=get(s,id);
     if(opt.kind==='attack'){
       const target=get(s,opt.target);
-      if(target.hero==='ranger'&&!s.noDodge&&paths(s,target,[1]).length){s.pending={actor:u.id,target:target.id,opt,phase:s.phase,combo:s.combo};s.phase='dodge';emit(s,'游侠受到攻击：由防守方选择瞬闪，或承受攻击');return {kind:'reaction',opt};}
+      if(target.hero==='ranger'&&!s.noDodge&&!trapped(s,target)&&paths(s,target,[1]).length){s.pending={actor:u.id,target:target.id,opt,phase:s.phase,combo:s.combo};s.phase='dodge';emit(s,'游侠受到攻击：由防守方选择瞬闪，或承受攻击');return {kind:'reaction',opt};}
       capture(s,u,opt);return {kind:opt.kind,opt,actor:u.id};
     }
     if(opt.kind==='dodge'){

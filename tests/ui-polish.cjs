@@ -50,7 +50,7 @@ const {draftGame}=require('./browser-helpers.cjs');
  await page.mouse.click(scene.x+14,scene.y+scene.height-55);assert.equal(await page.locator('#actionWheel').isVisible(),false);
  await page.click('[data-unit="red-mage"]');assert.equal(await page.locator('#actionWheel').isVisible(),true);
  await page.click('.hero-banner h1');assert.equal(await page.locator('#actionWheel').isVisible(),false);
- await page.click('[data-unit="red-s0"]');await page.locator('[data-action="move"] .sector-label').click();
+ await page.click('[data-unit="red-s0"]');await page.locator('[data-action="auto"] .sector-label').click();
  const target=await page.evaluate(()=>GameView.project(2,0));await page.mouse.click(target.x,target.y);
  await page.waitForFunction(()=>!GameView.locked&&GameView.state.ply===1);
  assert.equal((await page.evaluate(()=>GameView.state)).units.find(u=>u.id==='red-s0').x,2,'legal empty destination must still execute move');

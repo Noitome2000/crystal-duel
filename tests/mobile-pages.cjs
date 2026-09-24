@@ -8,10 +8,12 @@ const url=process.env.GAME_URL||'http://127.0.0.1:4173/crystal-duel/';
   page.on('pageerror',e=>errors.push(e.message));page.on('response',r=>{if(r.status()>=400)errors.push(`${r.status()} ${r.url()}`);});
   await page.goto(url);await page.locator('#setupDialog').waitFor({state:'visible'});
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
-  await draftGame(page);
+  assert.equal(await page.locator('#heroDetail').evaluate(e=>getComputedStyle(e).userSelect),'none');
+  assert.equal(await page.locator('#heroDetail').evaluate(e=>e.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true}))),false);
+  await draftGame(page,{confirmBySecondTap:true});
   await page.locator('[data-unit="red-s0"]').tap();
   await page.locator('#touchActions').waitFor({state:'visible'});
-  const button=page.locator('#touchActions [data-command="move"]');assert.ok((await button.boundingBox()).height>=44);await button.tap();
+  const button=page.locator('#touchActions [data-command="auto"]');assert.ok((await button.boundingBox()).height>=44); // Default selection already exposes movement and attacks.
   await page.locator('#scene').scrollIntoViewIfNeeded();
   const point=await page.evaluate(()=>GameView.project(2,0));await page.touchscreen.tap(point.x,point.y);
   await page.waitForFunction(()=>!GameView.locked&&GameView.state.ply===1);

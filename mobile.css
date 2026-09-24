@@ -42,3 +42,12 @@
  .hero-banner{padding:6px 0}.hero-banner h1,.hero-banner .eyebrow{display:none}.turn-chip{display:flex;gap:14px;align-items:center;border:0}.turn-chip>div{margin:0}.turn-chip strong{font-size:22px}
  .game-layout{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.board-column{grid-column:1/-1;grid-row:1}.board-wrap{height:calc(100svh - 140px);min-height:260px}
 }
+
+/* Keep long presses available for board gestures, without selecting game text. */
+html,body,body *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+@media(pointer:coarse){
+ .hero-detail{height:auto;min-height:112px;padding:12px;scroll-margin-bottom:72px}
+ .hero-detail strong{font-size:14px;line-height:1.5}.hero-detail strong small{font-size:12px}
+ .hero-detail p{font-size:12px;line-height:1.8}
+ .hero-card.inspecting{background:#d7bc8326;border-color:var(--gold)}
+}

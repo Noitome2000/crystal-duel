@@ -32,5 +32,18 @@ test('dodge retains attack path for animation and the repeated attack cannot tri
  assert.equal(R.apply(s,'a','attack',repeat).kind,'attack');assert.equal(R.get(s,'r').alive,false);
 });
 test('wolf may capture friendly, ordinary heroes may not',()=>{for(const h of ['wolf','general']){const s=board(hero('a','red',1,1,h),soldier('b','red',3,1),soldier('c','blue',4,3));assert.equal(options(s,'a','attack').some(o=>o.target==='b'),h==='wolf');}});
+test('strategist traps ranger movement, attacks and defensive dodge',()=>{
+ const s=board(hero('trap','red',3,3,'strategist'),hero('a','red',1,1,'knight'),hero('r','blue',3,1,'ranger'),soldier('other','blue',4,0));
+ assert.ok(R.trapped(s,R.get(s,'r')));
+ const defender={...s,side:'blue'};
+ assert.equal(options(defender,'r','move').length,0);assert.equal(options(defender,'r','attack').length,0);
+ action(s,'a','attack',3,1);assert.equal(R.get(s,'r').alive,false);assert.notEqual(s.phase,'dodge');
+});
+test('dodge legality also rejects a ranger trapped during a pending reaction',()=>{
+ const s=board(hero('trap','red',4,3,'strategist'),hero('a','red',1,1,'knight'),hero('r','blue',3,1,'ranger'),soldier('other','blue',4,0));
+ action(s,'a','attack',3,1);assert.equal(s.phase,'dodge');R.get(s,'trap').x=3;
+ assert.equal(options(s,'r','move').length,0);assert.throws(()=>R.apply(s,'r','move',{kind:'dodge',x:2,y:1}));
+ R.decline(s);assert.equal(R.get(s,'r').alive,false);
+});
 test('win freezes state and cannot be undone by turn switching',()=>{const s=board(hero('a','red',1,1,'general'),soldier('b','blue',3,1));action(s,'a','attack',3,1);assert.equal(s.winner,'red');assert.equal(s.phase,'over');assert.equal(s.ply,6);assert.equal(options(s,'a','move').length,0);assert.throws(()=>R.apply(s,'a','move',{x:2,y:1}));});
 test('random legal play preserves occupancy, bounds and turn progress',()=>{let seed=739;const rand=n=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed%n;};const heroes=Object.keys(R.HEROES);for(let game=0;game<20;game++){const s=R.create({red:[heroes[game%10],heroes[(game+3)%10]],blue:[heroes[(game+5)%10],heroes[(game+8)%10]]});for(let i=0;i<160&&!s.winner;i++){const choices=[];for(const u of s.units)for(const mode of ['move','attack','skill'])for(const opt of options(s,u.id,mode))choices.push({id:u.id,mode,opt});if(['combo','retreat','dodge'].includes(s.phase)&&rand(3)===0)R.decline(s);else if(choices.length){const c=choices[rand(choices.length)];R.apply(s,c.id,c.mode,c.opt);}else R.pass(s);const alive=s.units.filter(u=>u.alive);assert.equal(new Set(alive.map(R.key)).size,alive.length);assert.ok(alive.every(u=>R.inside(u.x,u.y)));}}});
