@@ -1,6 +1,19 @@
 const {test}=require('node:test'),assert=require('node:assert/strict');
 const SP=require('../self-play.js'),AI=require('../ai.js'),R=require('../rules-engine.js');
 const firstLegal=async state=>({action:AI.actions(state)[0]});
+test('hero initiative stats follow each side, handle shared heroes and rebuild historical records',()=>{
+  const rosters={red:['mage','knight'],blue:['mage','dragon']};
+  const games=[['red','red'],['blue','blue'],['red','draw'],['blue',null]].map(([first,winner])=>({ruleVersion:'endgame-20-ply-v1',rosters,first,winner}));
+  const report=SP.createReport(SP.normalize());for(const game of games)SP.record(report,game);
+  const mage=report.heroes.mage;
+  assert.deepEqual([mage.appearances,mage.wins,mage.losses,mage.draws,mage.unfinished,mage.score],[8,2,2,2,2,50]);
+  assert.deepEqual([mage.first.appearances,mage.first.wins,mage.first.losses,mage.first.draws,mage.first.unfinished,mage.first.score],[4,2,0,1,1,100]);
+  assert.deepEqual([mage.second.appearances,mage.second.wins,mage.second.losses,mage.second.draws,mage.second.unfinished,mage.second.score],[4,0,2,1,1,0]);
+  assert.equal(report.heroes.knight.first.score,100);assert.equal(report.heroes.knight.second.score,0);
+  assert.equal(report.heroes.dragon.first.score,100);assert.equal(report.heroes.dragon.second.score,0);
+  assert.equal(report.heroes.ranger.first.score,null);assert.equal(report.heroes.ranger.second.score,null);
+  assert.deepEqual(SP.summarize([...games,{...games[0],purpose:'validation'}]).heroes,report.heroes);
+});
 test('all 45 unordered pairs start without fabricated scores',()=>{
   const report=SP.createReport(SP.normalize());assert.equal(Object.keys(report.combinations).length,45);
   for(const c of Object.values(report.combinations)){assert.equal(c.appearances,0);assert.equal(c.score,null);assert.equal(c.first.score,null);assert.equal(c.second.score,null);}

@@ -57,6 +57,7 @@
     for(const h of heroes){const tr=document.createElement('tr');tr.dataset.hero=h.id;
       cell(tr,h.name);cell(tr,h.score==null?'—':h.score.toFixed(1),'score');
       for(const key of ['appearances','wins','losses','draws','unfinished'])cell(tr,h[key]);
+      for(const turn of ['first','second']){const stats=h[turn];cell(tr,stats.score==null?'— / 0':`${stats.score.toFixed(1)}% / ${stats.wins+stats.losses}`);}
       cell(tr,!h.appearances?'未出场':h.wins+h.losses<20?'样本偏少':'仅供参考','low-sample');body.appendChild(tr);
     }
     $('heroStatisticsSummary').textContent=`${$('heroStatisticsScope').value==='history'?'历史累计':'本轮模拟'} · ${report.completed} 局自我对抗，${heroes.reduce((n,h)=>n+h.appearances,0)} 次英雄出场。${report.excluded?` 已排除 ${report.excluded} 局验证、旧规则或不兼容记录。`:''}`;

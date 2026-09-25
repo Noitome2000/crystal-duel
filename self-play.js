@@ -47,7 +47,7 @@
       completed:0,firstWins:0,secondWins:0,redWins:0,blueWins:0,draws:0,unfinished:0,adjudications:0,firstScore:null,
       scoreDefinition:'英雄所在阵容胜场 /（胜场 + 负场）× 100；平局、未完成不计入分母；双方同英雄分别记一次出场。',
       combinationDefinition:'同一方两位英雄为一个组合，不区分上下位置；镜像阵容分别记两次出场。对阵按赤方组合与靛方组合分别统计。胜率仅以胜负局为分母。',
-      heroes:Object.fromEntries(HEROES.map(id=>[id,{id,name:R.HEROES[id].name,...emptyStats()}])),
+      heroes:Object.fromEntries(HEROES.map(id=>[id,{id,name:R.HEROES[id].name,...emptyStats(),first:emptyStats(),second:emptyStats()}])),
       combinations:Object.fromEntries(HEROES.flatMap((id,i)=>HEROES.slice(i+1).map(other=>{const key=comboKey([id,other]);return [key,{key,name:comboName(key),...emptyStats(),first:emptyStats(),second:emptyStats()}];}))),matchups:{},results:[]};
   }
   function emptyStats(){return {appearances:0,wins:0,losses:0,draws:0,unfinished:0,score:null};}
@@ -66,9 +66,8 @@
       if(['material','hero','second'].includes(result.reason))report.adjudications++;
     }else if(result.winner==='draw')report.draws++;else report.unfinished++;
     for(const side of ['red','blue'])for(const id of result.rosters[side]){
-      const h=report.heroes[id];h.appearances++;
-      h[!result.winner?'unfinished':result.winner==='draw'?'draws':result.winner===side?'wins':'losses']++;
-      h.score=h.wins+h.losses?100*h.wins/(h.wins+h.losses):null;
+      const h=report.heroes[id];updateStats(h,result,result.winner===side);
+      updateStats(h[result.first===side?'first':'second'],result,result.winner===side);
     }
     const redKey=comboKey(result.rosters.red),blueKey=comboKey(result.rosters.blue),redCombo=ensureStats(report.combinations,redKey,comboName(redKey)),blueCombo=ensureStats(report.combinations,blueKey,comboName(blueKey));
     updateStats(redCombo,result,result.winner==='red');updateStats(blueCombo,result,result.winner==='blue');
