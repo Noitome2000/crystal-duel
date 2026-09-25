@@ -42,7 +42,7 @@
         <p class="field-note">GitHub Pages 是静态网站，训练数据默认只在浏览器本地。填写一个细粒度 Token 后，页面会将完整训练数据提交到指定仓库；Token 只保留在当前页面内存，刷新后需要重新填写。</p>
         <div class="github-fields"><label>GitHub Token（只写入当前页面）<input id="githubToken" type="password" autocomplete="off" placeholder="github_pat_…"></label><label>用户名<input id="githubOwner" value="Noitome2000" autocomplete="off"></label><label>仓库<input id="githubRepo" value="crystal-duel" autocomplete="off"></label><label>分支<input id="githubBranch" value="main" autocomplete="off"></label></div>
         <div class="run-actions"><button id="syncGithub" type="button" class="primary-btn" disabled>提交训练数据到 GitHub →</button></div>
-        <p id="githubMessage" class="field-note" role="status">需要对目标仓库有 Contents: write 权限的 fine-grained token。同步文件：`training-data/training-dataset.json`。</p>
+        <p id="githubMessage" class="field-note" role="status">需要对目标仓库有 Contents: write 权限的 fine-grained token。同步文件：training-data/training-dataset.json。</p>
       </section>
       <section class="training-card progress-card">
         <div class="card-heading"><div><p class="section-kicker">02 / 运行进度</p><h2 id="runStatus" role="status">等待开始</h2></div><span id="elapsed" class="elapsed">00:00</span></div>
