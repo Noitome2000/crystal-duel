@@ -9,9 +9,10 @@
   const positionHistory=[];
   async function refreshTrainedModel(){
     try{await TrainingStore.restoreFolder();const profile=await TrainingStore.champion();GameAI.setProfile(profile||null);$('aiModelStatus').textContent=profile?`AI · 训练版本 ${profile.version}`:'AI · 内置策略';}
-    catch(error){$('aiModelStatus').textContent='AI · 训练库暂不可读';console.warn('Training model unavailable:',error.message);}
+    catch(error){GameAI.setProfile(null);$('aiModelStatus').textContent='AI · 内置策略（训练库暂不可读）';console.warn('Training model unavailable:',error.message);}
   }
   window.addEventListener('focus',refreshTrainedModel);
+  window.addEventListener('storage',event=>{if(event.key==='crystal-duel-training-libraries-v1'){GameAI.setProfile(null);refreshTrainedModel();}});
 
   let scene,camera,renderer,world,tileGroup,unitGroup,overlay,pathGroup,hintPathGroup,particles,statusEffects;
   const meshes=new Map(),tileMeshes=[],tweens=[];

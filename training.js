@@ -3,17 +3,33 @@
   const $=id=>document.getElementById(id),R=window.Rules,SP=window.SelfPlay,Store=window.TrainingStore,Learning=window.GameLearning,GitHub=window.GitHubSync;
   const sideName=side=>side==='red'?'赤方':'靛方';
   const reasons={elimination:'全歼获胜',material:'20 步：棋子较多',hero:'20 步：英雄优先',second:'20 步：后手获胜','decision-limit':'决策上限 · 未完成',repetition:'重复局面 · 未完成',cancelled:'手动停止 · 未完成'};
-  let running=false,stopRequested=false,lastReport=null,lastRendered=-1;
+  let running=false,stopRequested=false,lastReport=null,lastRendered=-1,libraryBusy=false,staleLibrary=false,cleanupPreview=null;
   let storedGames=0,historyReport=SP.createHistory();
   function download(value,name){const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:'application/json;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   async function refreshLibrary(){
     storedGames=await Store.count();const profile=await Store.champion();
-    historyReport=await Store.statistics();renderHeroes();renderCombinations();
+    historyReport=await Store.statistics();renderHeroes();renderCombinations();renderLibrarySelect();
     if(profile&&!GameAI.validProfile(profile))throw Error('已存储的模型不兼容当前规则');
     $('modelStatus').textContent=profile?`正在使用 · 训练版本 ${profile.version}`:'正在使用 · 内置策略';
     $('datasetStatus').textContent=`本地已保存 ${storedGames} 局逐步记录。包含阵容、先后手、每次行动、学习特征及最终结果。`;$('exportDataset').disabled=!storedGames;renderFolderStatus();return profile;
   }
-  function renderFolderStatus(){const status=Store.fileStatus();$('connectFolder').textContent=status.connected?'重新连接训练文件夹':'选择本地训练文件夹';$('folderStatus').textContent=status.connected?`已连接：${status.name}/${status.fileName}。训练数据和模型会自动写回此文件。${status.error?` ${status.error}`:''}`:status.supported?'未连接文件夹。连接后会自动保存训练数据和训练模型到 crystal-duel-training.json。':'当前 Edge 环境不支持直接写入文件夹，请使用导入 / 导出 JSON。';}
+  function renderFolderStatus(){const status=Store.fileStatus();$('reauthorizeFolder').hidden=!status.connected;$('folderStatus').textContent=status.connected?`已连接：${status.name}/${status.fileName}。当前库的训练数据和模型会自动写回此文件。${status.error?` ${status.error}`:''}`:status.supported?'未连接文件夹。选择空文件夹会保存当前库；选择已有训练文件的目录会打开该文件为独立库。':'当前浏览器不支持直接写文件夹，请使用打开 JSON / 导出训练数据。';}
+  function renderLibrarySelect(){const info=Store.libraryInfo();$('librarySelect').replaceChildren();for(const item of info.libraries)$('librarySelect').add(new Option(item.name,item.id));$('librarySelect').value=info.active;}
+  function setLibraryControls(){const busy=running||libraryBusy||staleLibrary;$('librarySettings').disabled=busy;$('startTraining').disabled=busy;$('syncGithub').disabled=busy||!$('githubToken').value.trim();}
+  function invalidateCleanup(){cleanupPreview=null;$('confirmCleanup').disabled=true;$('cleanupPreview').textContent='尚未选择清理范围。';}
+  function resetCurrentReport(){
+    lastReport=null;lastRendered=-1;GameAI.setProfile(null);invalidateCleanup();$('exportReport').disabled=true;
+    $('runStatus').textContent='等待开始';$('runProgress').value=0;$('elapsed').textContent='00:00';$('currentGame').textContent='训练库已切换，可以开始新一轮模拟。';
+    $('runSummary').textContent='本轮尚未开始，历史统计来自当前训练库。';for(const id of ['firstWins','secondWins','adjudications','unfinished'])$(id).textContent='—';
+    $('recordCount').textContent='0 局';$('matchResults').replaceChildren();
+  }
+  async function libraryAction(action,message,{reset=true}={}){
+    if(running||libraryBusy||staleLibrary)return;
+    libraryBusy=true;setLibraryControls();$('formError').hidden=true;
+    try{const result=await action();if(reset)resetCurrentReport();await refreshLibrary();$('libraryMessage').textContent=typeof message==='function'?message(result):message;}
+    catch(error){if(error.name!=='AbortError'){$('formError').textContent=error.message;$('formError').hidden=false;}renderLibrarySelect();}
+    finally{libraryBusy=false;setLibraryControls();renderFolderStatus();}
+  }
   async function saveGame(runId,result,metadata){
     const saved=await Store.saveGame(runId,result,metadata);storedGames++;SP.recordHistory(historyReport,saved);renderHeroes();renderCombinations();
     $('datasetStatus').textContent=`本地已保存 ${storedGames} 局逐步记录，本轮数据正在持续写入。`;$('exportDataset').disabled=false;
@@ -127,11 +143,12 @@
     }
   }
   $('trainingForm').addEventListener('submit',async event=>{
-    event.preventDefault();if(running)return;$('formError').hidden=true;let config;
+    event.preventDefault();if(running||libraryBusy||staleLibrary)return;$('formError').hidden=true;let config;
     try{config=SP.normalize(options());}catch(error){$('formError').textContent=error.message;$('formError').hidden=false;return;}
-    running=true;stopRequested=false;lastRendered=-1;$('trainingSettings').disabled=true;$('startTraining').disabled=true;$('stopTraining').disabled=false;
+    running=true;stopRequested=false;lastRendered=-1;invalidateCleanup();setLibraryControls();$('trainingSettings').disabled=true;$('stopTraining').disabled=false;
     const runId=`run-${Date.now()}-${Math.random().toString(36).slice(2,9)}`;
     try{
+      await Store.withSession(async()=>{
       const parent=await refreshLibrary();$('learningStatus').textContent='正在积累对抗数据，本轮对弈固定使用当前版本。';
       await SP.run(config,{cancelled:()=>stopRequested,onProgress:render,
         choose:(state,limits)=>GameAI.choose(state,{...limits,profile:parent}),
@@ -139,9 +156,10 @@
       await Store.saveRun(runId,lastReport);
       if(!stopRequested)await evolve(parent,config,runId);else $('learningStatus').textContent='已停止，已产生的对抗记录均已保存，可在后续训练中继续使用。';
       await Store.saveRun(runId,lastReport);await Store.flushFile();await refreshLibrary();
+      });
     }
     catch(error){$('formError').textContent=`运行中断：${error.message}。本轮内存报告仍可导出，已成功写入的历史记录保留。`;$('formError').hidden=false;$('learningStatus').textContent='运行发生错误，未启用未经验证的模型。';}
-    finally{running=false;$('trainingSettings').disabled=false;$('startTraining').disabled=false;$('stopTraining').disabled=true;if(lastReport)$('runStatus').textContent=`${lastReport.status==='complete'?'模拟完成':lastReport.status==='stopped'?'已停止':'运行中断'} · ${lastReport.completed} / ${lastReport.config.games} 局`;syncSlots();}
+    finally{running=false;setLibraryControls();$('trainingSettings').disabled=false;$('stopTraining').disabled=true;if(lastReport)$('runStatus').textContent=`${lastReport.status==='complete'?'模拟完成':lastReport.status==='stopped'?'已停止':'运行中断'} · ${lastReport.completed} / ${lastReport.config.games} 局`;syncSlots();}
   });
   $('stopTraining').addEventListener('click',()=>{if(!running)return;stopRequested=true;$('stopTraining').disabled=true;$('runStatus').textContent='正在停止并汇总…';});
   $('exportReport').addEventListener('click',()=>{
@@ -149,16 +167,31 @@
     download(lastReport,`晶界-自我对抗-${lastReport.startedAt.replace(/[:.]/g,'-')}.json`);
   });
   $('exportDataset').addEventListener('click',async()=>{try{download(await Store.exportDataset(),`晶界-训练数据-${Date.now()}.json`);}catch(error){$('formError').textContent=error.message;$('formError').hidden=false;}});
-  $('connectFolder').addEventListener('click',async()=>{const button=$('connectFolder');button.disabled=true;try{await Store.connectFolder();await refreshLibrary();$('learningStatus').textContent='本地训练文件夹已连接；后续对局和模型会自动保存到文件。';}catch(error){$('formError').textContent=`连接训练文件夹失败：${error.message}`;$('formError').hidden=false;}finally{button.disabled=false;renderFolderStatus();}});
+  $('newLibrary').addEventListener('click',()=>libraryAction(()=>Store.newLibrary($('libraryName').value.trim()||`新训练库 ${new Date().toLocaleString('zh-CN')}`),'已建立独立空训练库，使用内置 AI；旧记录、模型和目录保留在原库中。'));
+  $('librarySelect').addEventListener('change',()=>libraryAction(()=>Store.switchLibrary($('librarySelect').value),'已切换训练库，记录与模型不会混入其他库。'));
+  $('connectFolder').addEventListener('click',()=>libraryAction(()=>Store.connectFolder(),'已连接训练文件夹。已有文件会独立载入，空目录保存当前库。'));
+  $('reauthorizeFolder').addEventListener('click',()=>libraryAction(()=>Store.reauthorizeFolder(),'文件夹已授权，当前训练库已写回。',{reset:false}));
   $('importDataset').addEventListener('click',()=>$('datasetFile').click());
-  $('datasetFile').addEventListener('change',async event=>{const file=event.target.files?.[0];if(!file)return;try{await Store.importDataset(JSON.parse(await file.text()));await refreshLibrary();$('learningStatus').textContent='训练数据和模型已从 JSON 文件导入本地库。';}catch(error){$('formError').textContent=`导入失败：${error.message}`;$('formError').hidden=false;}finally{event.target.value='';}});
-  $('githubToken').addEventListener('input',()=>{$('syncGithub').disabled=!$('githubToken').value.trim()||running;});
+  $('datasetFile').addEventListener('change',async event=>{const file=event.target.files?.[0];if(!file)return;await libraryAction(async()=>{if(file.size>250*1024*1024)throw Error('训练文件超过 250 MB');return Store.importDataset(JSON.parse(await file.text()),file.name.slice(0,80));},'已打开 JSON 为独立训练库。原文件未改写；清理后请导出训练数据保存。');event.target.value='';});
+  for(const [id,hero]of Object.entries(R.HEROES))$('cleanupHero').add(new Option(hero.name,id));
+  $('cleanupHero').addEventListener('change',invalidateCleanup);
+  $('previewCleanup').addEventListener('click',()=>libraryAction(async()=>{const hero=$('cleanupHero').value,info=Store.libraryInfo();cleanupPreview={...await Store.previewHero(hero),library:info.active};$('confirmCleanup').disabled=!cleanupPreview.removed;
+    $('cleanupPreview').textContent=`当前库：${info.libraries.find(item=>item.id===info.active).name}。涉及${R.HEROES[hero].name} ${cleanupPreview.removed} 局，保留 ${cleanupPreview.retained} 局；移除旧模型 ${cleanupPreview.modelsCleared} 个。${Store.fileStatus().connected?'确认后先备份，再写回已连接文件。':'当前未连接文件夹，清理后请导出保存。'}`;
+  },'清理预览已生成。',{reset:false}));
+  $('confirmCleanup').addEventListener('click',()=>{
+    if(!cleanupPreview||cleanupPreview.library!==Store.libraryInfo().active)return;
+    const preview=cleanupPreview;
+    if(!confirm(`删除当前库中涉及${R.HEROES[preview.hero].name}的 ${preview.removed} 局，保留 ${preview.retained} 局，并移除全部旧模型？旧库将保留为备份。`))return;
+    libraryAction(()=>Store.removeHero(preview.hero,preview),result=>`已清理 ${result.removed} 局，保留 ${result.retained} 局。当前使用内置 AI；原库保留在列表中。${result.backupName?`文件备份：${result.backupName}`:'请导出训练数据保存清理后的文件。'}`);
+  });
+  $('githubToken').addEventListener('input',setLibraryControls);
   $('syncGithub').addEventListener('click',async()=>{
     const button=$('syncGithub');button.disabled=true;$('githubSyncState').textContent='同步中';$('githubMessage').textContent='正在读取本地训练数据并提交到 GitHub…';
     try{GitHub.configure($('githubToken').value);const result=await GitHub.sync({owner:$('githubOwner').value,repo:$('githubRepo').value,branch:$('githubBranch').value,dataset:await Store.exportDataset(),message:`Update AI training data (${new Date().toISOString()})`});$('githubSyncState').textContent='已同步';$('githubMessage').textContent=`已提交 ${result.bytes.toLocaleString()} 字节训练数据。Commit: ${result.commit||'已更新'}。`;
     }catch(error){$('githubSyncState').textContent='失败';$('githubMessage').textContent=`同步失败：${error.message}`;}finally{button.disabled=!$('githubToken').value.trim()||running;}
   });
-  window.addEventListener('beforeunload',event=>{if(running){event.preventDefault();event.returnValue='';}});
+  window.addEventListener('beforeunload',event=>{if(running||libraryBusy){event.preventDefault();event.returnValue='';}});
+  window.addEventListener('storage',event=>{if(event.key==='crystal-duel-training-libraries-v1'){staleLibrary=true;stopRequested=true;setLibraryControls();$('libraryMessage').textContent='其他页面已切换或修改训练库。请刷新本页后继续，避免写入旧库。';}});
   syncSlots();renderHeroes();renderCombinations();renderFolderStatus();
-  $('startTraining').disabled=true;Store.restoreFolder().then(()=>refreshLibrary()).then(()=>{$('startTraining').disabled=false;}).catch(error=>{$('formError').textContent=`训练数据存储不可用：${error.message}`;$('formError').hidden=false;$('modelStatus').textContent='无法打开本地训练库';$('startTraining').disabled=false;});
+  libraryBusy=true;setLibraryControls();Store.restoreFolder().then(()=>refreshLibrary()).then(()=>{libraryBusy=false;setLibraryControls();}).catch(error=>{$('formError').textContent=`训练数据存储不可用：${error.message}`;$('formError').hidden=false;$('modelStatus').textContent='无法打开本地训练库';});
 })();

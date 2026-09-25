@@ -34,7 +34,17 @@
       <section class="training-card learning-card">
         <div class="card-heading"><div><p class="section-kicker">LEARNING / 持续积累</p><h2 id="modelStatus">正在读取训练库…</h2></div><button id="exportDataset" class="ghost-btn" disabled>导出训练数据</button></div>
         <p id="datasetStatus" class="field-note">训练数据保存在此浏览器的本地数据库，刷新页面后继续保留。</p>
-        <div class="local-folder-row"><button id="connectFolder" type="button" class="primary-btn">选择本地训练文件夹</button><button id="importDataset" type="button" class="ghost-btn">导入 JSON</button><input id="datasetFile" type="file" accept="application/json,.json" hidden></div>
+        <fieldset id="librarySettings">
+          <div class="field-grid"><label>当前训练库<select id="librarySelect" aria-label="当前训练库"></select></label><label>新训练库名称<input id="libraryName" maxlength="80" placeholder="例如：技能调整后第一版"></label></div>
+          <div class="local-folder-row"><button id="newLibrary" type="button" class="primary-btn">新建训练库 / 从零训练</button><button id="connectFolder" type="button" class="ghost-btn">选择训练文件夹</button><button id="reauthorizeFolder" type="button" class="ghost-btn" hidden>重新授权文件夹</button><button id="importDataset" type="button" class="ghost-btn">打开 JSON 为独立库</button><input id="datasetFile" type="file" accept="application/json,.json" hidden></div>
+          <p class="field-note">新建库从零记录、内置 AI 开始，旧库保留在下拉列表中。新库不会沿用旧目录，请另选空文件夹保存。选择已有训练文件的目录或打开 JSON 时，仅载入该文件，绝不混入当前库；打开 JSON 后需导出保存，原文件不会自动改写。</p>
+          <details class="library-cleanup"><summary>按英雄清理训练数据</summary>
+            <p class="field-note">先打开要处理的训练文件夹 / JSON。删除双方阵容中包含该英雄的整局记录（含验证局），保留其余对局，重新统计。旧模型无法按英雄拆分，清理时全部停用并移除；后续从内置 AI 用保留记录重新学习。旧库自动保留为备份，已连接目录还会先写一份备份文件。</p>
+            <div class="field-grid"><label>要清理的英雄<select id="cleanupHero" aria-label="要清理的英雄"></select></label><div class="local-folder-row"><button id="previewCleanup" type="button" class="ghost-btn">预览清理范围</button><button id="confirmCleanup" type="button" class="ghost-btn" disabled>确认清理</button></div></div>
+            <p id="cleanupPreview" class="field-note" role="status">尚未选择清理范围。</p>
+          </details>
+        </fieldset>
+        <p id="libraryMessage" class="field-note" role="status">各训练库分别保存记录、模型和统计。</p>
         <p id="folderStatus" class="field-note">未连接文件夹。连接后会自动保存训练数据和训练模型到 crystal-duel-training.json。</p>
         <p id="learningStatus" class="run-summary" role="status">根据历史对局的最终胜负，学习英雄价值、机动和局面评估参数。新版本验证达标才会启用。</p>
         <p class="field-note learning-note">启用门槛：20 局独立验证中至少 16 局分出胜负，新版胜率 ≥ 60% 且净胜至少 4 局。验证局也保存为数据，但只参加下一轮训练。更换浏览器、地址或清理网站数据会影响本地训练库，建议定期导出备份。</p>
@@ -79,5 +89,5 @@
   </div>
   <footer class="training-footer"><strong>残局规则</strong><span>场上棋子不大于 3 个后，再完成 20 步仍未分胜负，依次检定：棋子较多者胜；各一子时英雄胜士兵；同为英雄或同为士兵时后手胜。一步按一方完整行动计，连击、闪避和游击不额外计步，期间吃子不重置计数。</span></footer>
 </main>
-<script src="rules-engine.js"></script><script src="ai.js"></script><script src="draft.js"></script><script src="self-play.js"></script><script src="training-store.js"></script><script src="learning.js"></script><script src="github-sync.js"></script><script src="training.js"></script>
+<script src="rules-engine.js"></script><script src="ai.js"></script><script src="draft.js"></script><script src="self-play.js"></script><script src="training-library.js"></script><script src="training-store.js"></script><script src="learning.js"></script><script src="github-sync.js"></script><script src="training.js"></script>
 </body></html>

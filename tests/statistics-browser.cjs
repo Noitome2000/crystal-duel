@@ -60,16 +60,20 @@ const root=path.resolve(__dirname,'..');
     const dataset=await page.evaluate(()=>TrainingStore.exportDataset());assert.equal(dataset.statistics.completed,5);assert.equal(dataset.games.length,7);
     // Mock only the directory picker/file boundary; exercise real IndexedDB, JSON and import logic.
     const folder=await page.evaluate(async()=>{
-      let fileText=JSON.stringify({schema:1,games:[],models:[],runs:[],meta:[]});
+      let fileText=null;
       const handle={name:'statistics-test',queryPermission:async()=> 'granted',getFileHandle:async()=>({
-        getFile:async()=>new Blob([fileText]),createWritable:async()=>({write:async text=>{fileText=text;},close:async()=>{}})
+        getFile:async()=>{if(fileText===null)throw new DOMException('Missing','NotFoundError');return new Blob([fileText]);},createWritable:async()=>({write:async text=>{fileText=text;},close:async()=>{}})
       })};
       const put=IDBObjectStore.prototype.put;
       IDBObjectStore.prototype.put=function(value,...args){return put.call(this,this.name==='meta'&&value.key==='directoryHandle'?{key:'directoryHandle',testMarker:'local-only'}:value,...args);};
       window.showDirectoryPicker=async()=>handle;
       await TrainingStore.connectFolder();
       const file=JSON.parse(fileText);IDBObjectStore.prototype.put=put;
+      const sourceId=TrainingStore.libraryInfo().active;
       await TrainingStore.importDataset({...file,meta:[...file.meta,{key:'directoryHandle',handle:{}}]});
+      const importedDb=await TrainingStore.open(),importedHandle=await new Promise(resolve=>{const req=importedDb.transaction('meta').objectStore('meta').get('directoryHandle');req.onsuccess=()=>resolve(req.result);});
+      if(importedHandle)throw Error('JSON directory handle leaked into imported library');
+      await TrainingStore.switchLibrary(sourceId);
       const db=await TrainingStore.open(),saved=await new Promise((resolve,reject)=>{const request=db.transaction('meta').objectStore('meta').get('directoryHandle');request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
       await new Promise((resolve,reject)=>{const tx=db.transaction('meta','readwrite');tx.objectStore('meta').delete('directoryHandle');tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});
       return {fileStats:file.statistics.completed,hasExportedHandle:file.meta.some(m=>m.key==='directoryHandle'),retained:saved.testMarker==='local-only'};
