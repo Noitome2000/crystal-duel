@@ -33,6 +33,17 @@ const root=path.resolve(__dirname,'..');
     await page.reload();await page.waitForFunction(()=>!document.querySelector('#startTraining').disabled);
     assert.match(await page.locator('#statisticsSummary').innerText(),/5 局.*2 \/ 45/);
     assert.match(await page.locator('#statisticsSummary').innerText(),/排除 2 局/);
+    assert.match(await page.locator('#heroStatisticsSummary').innerText(),/历史累计 · 5 局.*20 次.*排除 2 局/);
+    const heroRow=page.locator('#heroResults tr[data-hero="mage"]');
+    assert.deepEqual(await heroRow.locator('td').allTextContents(),['魔术师','50.0','6','2','2','1','1','样本偏少']);
+    await page.selectOption('#heroStatisticsScope','current');
+    assert.match(await page.locator('#heroStatisticsSummary').innerText(),/本轮模拟 · 0 局/);
+    assert.equal(await heroRow.locator('td').nth(2).innerText(),'0');assert.ok(await page.locator('#exportHeroStatistics').isDisabled());
+    assert.equal(await page.locator('#statisticsScope').inputValue(),'history');
+    await page.selectOption('#heroStatisticsScope','history');
+    const heroDownloading=page.waitForEvent('download');await page.click('#exportHeroStatistics');
+    const heroDownload=await heroDownloading,heroExport=JSON.parse(await fs.readFile(await heroDownload.path(),'utf8'));
+    assert.equal(heroExport.scope,'history');assert.equal(heroExport.completed,5);assert.equal(heroExport.heroes.mage.appearances,6);assert.equal(heroExport.excluded,2);
     const row=page.locator(`#combinationResults tr[data-combination="${key}"]`);
     assert.deepEqual(await row.locator('td').allTextContents(),['骑士 + 魔术师','50.0','6','2','2','1','1','100.0% / 2','0.0% / 2','样本偏少']);
     await page.selectOption('#combinationSort','appearances');assert.equal(await page.locator('#combinationResults tr').first().getAttribute('data-combination'),key);
@@ -65,11 +76,35 @@ const root=path.resolve(__dirname,'..');
     await page.reload();await page.waitForFunction(()=>!document.querySelector('#startTraining').disabled);
     assert.ok(!(await page.locator('#formError').isVisible()),await page.locator('#formError').innerText());
     assert.match(await page.locator('#statisticsSummary').innerText(),/5 局/);
+    // Run two short batches through the real UI, with deterministic legal moves to bound runtime.
+    await page.evaluate(()=>{GameAI.choose=async state=>({action:GameAI.actions(state)[0]});});
+    await page.locator('.advanced summary').click();await page.fill('#maxDecisions','20');
+    await page.selectOption('#redSlot1','mage');await page.selectOption('#redSlot2','knight');
+    await page.selectOption('#blueSlot1','dragon');await page.selectOption('#blueSlot2','ranger');
+    for(const [games,total]of [[2,7],[1,8]]){
+      await page.fill('#games',String(games));await page.click('#startTraining');
+      await page.waitForFunction(()=>!document.querySelector('#startTraining').disabled);
+      assert.equal(await page.locator('#formError').isVisible(),false);
+      await page.selectOption('#heroStatisticsScope','current');
+      assert.match(await page.locator('#heroStatisticsSummary').innerText(),new RegExp(`本轮模拟 · ${games} 局`));
+      assert.equal(await heroRow.locator('td').nth(2).innerText(),String(games));
+      await page.selectOption('#heroStatisticsScope','history');
+      assert.match(await page.locator('#heroStatisticsSummary').innerText(),new RegExp(`历史累计 · ${total} 局`));
+      assert.equal(await heroRow.locator('td').nth(2).innerText(),String(total+1));
+    }
+    await page.selectOption('#heroStatisticsScope','current');
+    const currentDownloading=page.waitForEvent('download');await page.click('#exportHeroStatistics');
+    const currentDownload=await currentDownloading,currentExport=JSON.parse(await fs.readFile(await currentDownload.path(),'utf8'));
+    assert.equal(currentExport.scope,'current');assert.equal(currentExport.completed,1);assert.equal(currentExport.heroes.mage.appearances,1);
+    await page.reload();await page.waitForFunction(()=>!document.querySelector('#startTraining').disabled);
+    assert.match(await page.locator('#heroStatisticsSummary').innerText(),/历史累计 · 8 局/);
+    await page.selectOption('#heroStatisticsScope','current');assert.match(await page.locator('#heroStatisticsSummary').innerText(),/本轮模拟 · 0 局/);
+    await page.selectOption('#heroStatisticsScope','history');
     for(const width of [1440,760,390,320]){
       await page.setViewportSize({width,height:1000});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`${width}px overflow`);
     }
-    await page.locator('#combinationTitle').scrollIntoViewIfNeeded();await page.screenshot({path:path.join(root,'artifacts/statistics-mobile.png')});
-    await page.setViewportSize({width:1440,height:1100});await page.locator('#combinationTitle').scrollIntoViewIfNeeded();await page.screenshot({path:path.join(root,'artifacts/statistics-desktop.png')});
+    await page.locator('#heroTitle').scrollIntoViewIfNeeded();await page.screenshot({path:path.join(root,'artifacts/statistics-mobile.png')});
+    await page.setViewportSize({width:1440,height:1100});await page.locator('#heroTitle').scrollIntoViewIfNeeded();await page.screenshot({path:path.join(root,'artifacts/statistics-desktop.png')});
     assert.deepEqual(errors,[]);console.log('PASS: 45 combinations, historical deduplication, mirror and initiative stats, filters, sorting, JSON export, mocked folder roundtrip with real IndexedDB, and mobile layout.');
   }finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}
 })().catch(error=>{console.error(error);process.exitCode=1;});

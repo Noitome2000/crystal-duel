@@ -8,14 +8,14 @@
   function download(value,name){const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:'application/json;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   async function refreshLibrary(){
     storedGames=await Store.count();const profile=await Store.champion();
-    historyReport=await Store.statistics();renderCombinations();
+    historyReport=await Store.statistics();renderHeroes();renderCombinations();
     if(profile&&!GameAI.validProfile(profile))throw Error('已存储的模型不兼容当前规则');
     $('modelStatus').textContent=profile?`正在使用 · 训练版本 ${profile.version}`:'正在使用 · 内置策略';
     $('datasetStatus').textContent=`本地已保存 ${storedGames} 局逐步记录。包含阵容、先后手、每次行动、学习特征及最终结果。`;$('exportDataset').disabled=!storedGames;renderFolderStatus();return profile;
   }
   function renderFolderStatus(){const status=Store.fileStatus();$('connectFolder').textContent=status.connected?'重新连接训练文件夹':'选择本地训练文件夹';$('folderStatus').textContent=status.connected?`已连接：${status.name}/${status.fileName}。训练数据和模型会自动写回此文件。${status.error?` ${status.error}`:''}`:status.supported?'未连接文件夹。连接后会自动保存训练数据和训练模型到 crystal-duel-training.json。':'当前 Edge 环境不支持直接写入文件夹，请使用导入 / 导出 JSON。';}
   async function saveGame(runId,result,metadata){
-    const saved=await Store.saveGame(runId,result,metadata);storedGames++;SP.recordHistory(historyReport,saved);renderCombinations();
+    const saved=await Store.saveGame(runId,result,metadata);storedGames++;SP.recordHistory(historyReport,saved);renderHeroes();renderCombinations();
     $('datasetStatus').textContent=`本地已保存 ${storedGames} 局逐步记录，本轮数据正在持续写入。`;$('exportDataset').disabled=false;
   }
   async function evolve(parent,config,runId){
@@ -49,7 +49,9 @@
   function options(){return {games:$('games').value,difficulty:$('difficulty').value,first:$('first').value,randomMode:$('randomMode').value,seed:$('seed').value,maxDecisions:$('maxDecisions').value,slots:{red:[$('redSlot1').value,$('redSlot2').value],blue:[$('blueSlot1').value,$('blueSlot2').value]}};}
   function clock(ms){const seconds=Math.floor(ms/1000);return `${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`;}
   function cell(row,text,className){const td=document.createElement('td');td.textContent=text;if(className)td.className=className;row.appendChild(td);}
-  function renderHeroes(report){
+  function selectedHeroStatistics(){return $('heroStatisticsScope').value==='history'?historyReport:lastReport;}
+  function renderHeroes(){
+    const report=selectedHeroStatistics()||SP.createReport(SP.normalize());
     const body=$('heroResults');body.replaceChildren();
     const heroes=Object.values(report.heroes).sort((a,b)=>(b.score??-1)-(a.score??-1)||b.appearances-a.appearances);
     for(const h of heroes){const tr=document.createElement('tr');tr.dataset.hero=h.id;
@@ -57,7 +59,15 @@
       for(const key of ['appearances','wins','losses','draws','unfinished'])cell(tr,h[key]);
       cell(tr,!h.appearances?'未出场':h.wins+h.losses<20?'样本偏少':'仅供参考','low-sample');body.appendChild(tr);
     }
+    $('heroStatisticsSummary').textContent=`${$('heroStatisticsScope').value==='history'?'历史累计':'本轮模拟'} · ${report.completed} 局自我对抗，${heroes.reduce((n,h)=>n+h.appearances,0)} 次英雄出场。${report.excluded?` 已排除 ${report.excluded} 局验证、旧规则或不兼容记录。`:''}`;
+    $('exportHeroStatistics').disabled=!report.completed;
   }
+  $('heroStatisticsScope').addEventListener('change',renderHeroes);
+  $('exportHeroStatistics').addEventListener('click',()=>{
+    const report=selectedHeroStatistics();if(!report?.completed)return;
+    const {version,ruleVersion,config,search,completed,scoreDefinition,heroes,excluded=0}=report;
+    download({version,ruleVersion,scope:$('heroStatisticsScope').value,exportedAt:new Date().toISOString(),config,search,completed,excluded,scoreDefinition,heroes},`晶界-英雄统计-${Date.now()}.json`);
+  });
   function selectedStatistics(){return $('statisticsScope').value==='history'?historyReport:lastReport;}
   function renderCombinations(){
     const report=selectedStatistics()||SP.createReport(SP.normalize()),hero=$('combinationHero').value,sort=$('combinationSort').value;
@@ -112,7 +122,7 @@
       const ranked=Object.values(report.heroes).filter(h=>h.score!=null).sort((a,b)=>b.score-a.score);
       if(ranked.length)summary+=` 本轮表现分领先：${ranked.slice(0,3).map(h=>`${h.name} ${h.score.toFixed(1)}`).join('、')}。`;
       summary+=' 分数反映本轮阵容与搜索强度，少量样本请谨慎比较。';
-      $('runSummary').textContent=summary;renderHeroes(report);renderRecords(report);renderCombinations();
+      $('runSummary').textContent=summary;renderHeroes();renderRecords(report);renderCombinations();
     }
   }
   $('trainingForm').addEventListener('submit',async event=>{
@@ -148,6 +158,6 @@
     }catch(error){$('githubSyncState').textContent='失败';$('githubMessage').textContent=`同步失败：${error.message}`;}finally{button.disabled=!$('githubToken').value.trim()||running;}
   });
   window.addEventListener('beforeunload',event=>{if(running){event.preventDefault();event.returnValue='';}});
-  syncSlots();renderHeroes(SP.createReport(SP.normalize()));renderCombinations();renderFolderStatus();
+  syncSlots();renderHeroes();renderCombinations();renderFolderStatus();
   $('startTraining').disabled=true;Store.restoreFolder().then(()=>refreshLibrary()).then(()=>{$('startTraining').disabled=false;}).catch(error=>{$('formError').textContent=`训练数据存储不可用：${error.message}`;$('formError').hidden=false;$('modelStatus').textContent='无法打开本地训练库';$('startTraining').disabled=false;});
 })();

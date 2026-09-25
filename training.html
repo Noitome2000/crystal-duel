@@ -54,9 +54,13 @@
         <p id="runSummary" class="run-summary">结束后显示先后手比例与英雄表现。未完成对局单独统计。</p>
       </section>
       <section class="training-card">
-        <div class="card-heading"><div><p class="section-kicker">03 / 英雄表现</p><h2>每一次出场，都有记录。</h2></div><button id="exportReport" class="ghost-btn" disabled>导出报告</button></div>
+        <div class="card-heading"><div><p class="section-kicker">03 / 英雄表现</p><h2 id="heroTitle">每一次出场，都有记录。</h2></div><button id="exportReport" class="ghost-btn" disabled>导出本轮报告</button></div>
+        <div class="statistics-controls"><label>英雄统计范围<select id="heroStatisticsScope"><option value="history">历史累计</option><option value="current">本轮模拟</option></select></label></div>
+        <p id="heroStatisticsSummary" class="field-note" role="status">正在读取历史英雄统计…</p>
+        <p class="field-note">历史累计包含当前规则下已保存的自我对抗，排除新旧模型验证局及不兼容记录；不同搜索强度和模型会合并。本轮模拟仅显示本页面最近一轮，开始新一轮时重置。刷新后可从历史累计查看已保存数据。</p>
+        <button id="exportHeroStatistics" type="button" class="ghost-btn" disabled>导出英雄统计</button>
         <p id="scoreHelp" class="field-note">表现分 = 胜场 ÷（胜场 + 负场）× 100，50 分为胜负各半。平局、未完成不进入分母；未出场显示“—”。双方同英雄分别记录一次出场。分数包含搭档与对手的影响。</p>
-        <div class="table-scroll" tabindex="0" role="region" aria-label="英雄表现统计，可横向滚动"><table aria-describedby="scoreHelp"><thead><tr><th scope="col">英雄</th><th scope="col">表现分</th><th scope="col">出场</th><th scope="col">胜</th><th scope="col">负</th><th scope="col">平局</th><th scope="col">未完成</th><th scope="col">样本</th></tr></thead><tbody id="heroResults"></tbody></table></div>
+        <div class="table-scroll" tabindex="0" role="region" aria-label="英雄表现统计，可横向滚动"><table aria-describedby="scoreHelp heroStatisticsSummary"><thead><tr><th scope="col">英雄</th><th scope="col">表现分</th><th scope="col">出场</th><th scope="col">胜</th><th scope="col">负</th><th scope="col">平局</th><th scope="col">未完成</th><th scope="col">样本</th></tr></thead><tbody id="heroResults"></tbody></table></div>
       </section>
       <section class="training-card" aria-labelledby="combinationTitle">
         <div class="card-heading"><div><p class="section-kicker">04 / 英雄组合</p><h2 id="combinationTitle">两位英雄，一起看表现。</h2></div><button id="exportStatistics" type="button" class="ghost-btn" disabled>导出组合统计</button></div>
