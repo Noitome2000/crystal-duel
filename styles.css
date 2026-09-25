@@ -19,3 +19,6 @@
 .action-wheel .action .sector-label{width:auto;min-width:28px;white-space:nowrap;font-size:10px;gap:0;text-shadow:0 1px 3px #001916;pointer-events:none}
 .action-wheel .sector-label b{letter-spacing:0;font-weight:600}
 .action-wheel .sector-label i,.action-wheel .sector-label small{display:none}
+
+/* Standalone self-play entry in setup and match toolbar. */
+.training-link{display:inline-block;text-decoration:none;border:1px solid #d7bc8350;border-radius:5px;padding:9px 12px;color:var(--gold);font-size:11px;white-space:nowrap}.training-link:focus-visible{outline:2px solid var(--gold);outline-offset:3px}.match-settings{display:flex;align-items:center;gap:12px;flex-wrap:wrap}

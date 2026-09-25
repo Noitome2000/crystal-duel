@@ -16,7 +16,7 @@
 .setup-dialog .dialog-heading h2 { font-size:30px; margin:5px 0 6px; letter-spacing:3px; }
 .setup-dialog .dialog-heading p { margin:0; font-size:11px; }
 .setup-dialog .dialog-heading .eyebrow { font-size:8px; letter-spacing:3px; }
-.setup-dialog .match-settings { margin:0; padding:0; border:0; display:block; flex-shrink:0; }
+.setup-dialog .match-settings { margin:0; padding:0; border:0; display:flex; align-items:center; justify-content:flex-end; gap:12px; flex-shrink:0; }
 .setup-dialog .match-settings label { display:flex; gap:10px; align-items:center; }
 .setup-dialog .match-settings select { margin:0; padding:9px; background:#102929; }
 .draft-opening { display:grid; grid-template-columns:1fr 1.2fr; gap:24px; align-items:center; margin:18px 0; padding:15px 18px; border:1px solid #d7bc8328; border-radius:8px; background:#d7bc8304; }

@@ -4,6 +4,24 @@
   const R=typeof module!=='undefined'&&module.exports?require('./rules-engine.js'):root.Rules;
   const owner=s=>s.phase==='dodge'?R.get(s,s.pending.target).side:s.side;
   const value=u=>u.type==='soldier'?100:180;
+  const FEATURE_NAMES=[...Object.keys(R.HEROES).map(h=>'hero:'+h),'soldiers','centrality','trapped','mobility','charged','initiative'];
+  let activeProfile=null;
+  function validProfile(profile){return !!profile&&profile.schema===1&&profile.ruleVersion==='endgame-20-ply-v1'&&Array.isArray(profile.weights)&&profile.weights.length===FEATURE_NAMES.length&&profile.weights.every(w=>Number.isFinite(w)&&Math.abs(w)<=180);}
+  function setProfile(profile){if(profile!=null&&!validProfile(profile))throw Error('训练模型与当前规则不兼容');activeProfile=profile?JSON.parse(JSON.stringify(profile)):null;}
+  function getProfile(){return activeProfile?JSON.parse(JSON.stringify(activeProfile)):null;}
+  function features(s,side){
+    const vector=Array(FEATURE_NAMES.length).fill(0),heroes=Object.keys(R.HEROES);
+    for(const u of s.units.filter(u=>u.alive)){
+      const sign=u.side===side?1:-1;
+      if(u.type==='hero')vector[heroes.indexOf(u.hero)]+=sign;else vector[10]+=sign/4;
+      vector[11]+=sign*(3-Math.abs(u.x-2.5)-Math.abs(u.y-1.5))/24;
+      vector[12]+=sign*(R.trapped(s,u)?1:0)/6;
+      const view={...s,side:u.side,phase:'normal',actor:null,combo:false,pending:null};
+      vector[13]+=sign*R.legal(view,u.id,'move').length/24;
+      if(u.charged)vector[14]+=sign/2;
+    }
+    vector[15]=owner(s)===side?1:-1;return vector;
+  }
   function actions(s){
     if(s.winner)return [];
     const out=[];
@@ -14,8 +32,8 @@
     return out;
   }
   function next(s,a){const n=JSON.parse(JSON.stringify(s));n.events=[];if(a.type==='act')R.apply(n,a.id,a.mode,a.opt);else if(a.type==='decline')R.decline(n);else R.pass(n);return n;}
-  function key(s){return `${s.side}/${s.phase}/${s.actor}/${s.combo}/${s.noDodge}/${Math.min(s.ply,6)}/${s.pending?JSON.stringify(s.pending):''}/`+s.units.filter(u=>u.alive).map(u=>`${u.id}:${u.x},${u.y},${!!u.charged},${Math.max(0,(u.pushImmuneUntil||0)-s.ply)},${Math.max(0,(u.swapImmuneUntil||0)-s.ply)},${Math.max(0,(s.cooldowns[u.id]||0)-s.ply)}`).join(';');}
-  function evaluate(s,side){
+  function key(s){return `${s.first}/${s.side}/${s.phase}/${s.actor}/${s.combo}/${s.noDodge}/${Math.min(s.ply,6)}/${s.endgameStartPly==null?'none':s.ply-s.endgameStartPly}/${s.pending?JSON.stringify(s.pending):''}/`+s.units.filter(u=>u.alive).map(u=>`${u.id}:${u.x},${u.y},${!!u.charged},${Math.max(0,(u.pushImmuneUntil||0)-s.ply)},${Math.max(0,(u.swapImmuneUntil||0)-s.ply)},${Math.max(0,(s.cooldowns[u.id]||0)-s.ply)}`).join(';');}
+  function evaluate(s,side,profile=activeProfile){
     if(s.winner)return s.winner==='draw'?0:s.winner===side?100000:-100000;
     let score=0;const threatened={red:new Set(),blue:new Set()};
     for(const team of ['red','blue']){
@@ -34,9 +52,10 @@
       }
     }
     for(const team of ['red','blue'])for(const id of threatened[team])score+=(team===side?1:-1)*value(R.get(s,id))*(owner(s)===team?.38:.20);
+    if(profile&&profile.weights.some(w=>w!==0)){const f=features(s,side);score+=profile.weights.reduce((sum,w,i)=>sum+w*f[i],0);}
     return score;
   }
-  async function choose(s,{side=owner(s),maxDepth=4,maxNodes=4500,timeMs=750,history=[],cancelled=()=>false}={}){
+  async function choose(s,{side=owner(s),maxDepth=4,maxNodes=4500,timeMs=750,history=[],cancelled=()=>false,profile=activeProfile}={}){
     const evaluations=new Map(),rankings=new Map();let cacheHits=0;
     const start=Date.now(),deadline=start+timeMs;let nodes=0,lastYield=start,completedDepth=0;
     const all=actions(s);if(!all.length)return {action:null,stats:{nodes:0,depth:0}};
@@ -47,7 +66,7 @@
       if(Date.now()-lastYield>=10){await new Promise(r=>setTimeout(r,0));lastYield=Date.now();}
       if(nodes>=maxNodes||Date.now()>=deadline||cancelled())throw stop;
     }
-    const assess=n=>{const k=key(n);if(evaluations.has(k)){cacheHits++;return evaluations.get(k);}const v=evaluate(n,side)-(history.filter(h=>h===k).length*14);evaluations.set(k,v);return v;};
+    const assess=n=>{const k=key(n);if(evaluations.has(k)){cacheHits++;return evaluations.get(k);}const v=evaluate(n,side,profile)-(history.filter(h=>h===k).length*14);evaluations.set(k,v);return v;};
     async function ranked(n,rootNode){
       const cacheKey=key(n)+'/'+rootNode;if(rankings.has(cacheKey)){cacheHits++;return rankings.get(cacheKey).slice();}
       const list=[];
@@ -59,7 +78,7 @@
       rankings.set(cacheKey,kept);return kept.slice();
     }
     async function search(n,depth,alpha,beta,extensions){
-      await checkpoint();if(n.winner)return evaluate(n,side);
+      await checkpoint();if(n.winner)return evaluate(n,side,profile);
       if(depth<=0){if(extensions<=0)return assess(n);if(n.phase==='normal'&&!n.actor){
           const tactical=actions(n).filter(a=>a.opt?.kind==='attack'&&R.get(n,a.opt.target).side!==R.get(n,a.id).side);
           let value=assess(n);const maximizing=owner(n)===side;
@@ -83,16 +102,17 @@
     }catch(e){if(e!==stop)throw e;}
     return {action:cancelled()?null:best,stats:{nodes,depth:completedDepth,score,cacheHits,elapsedMs:Date.now()-start}};
   }
-  function chooseHero(picks,side='blue',{random=Math.random}={}){
+  function chooseHero(picks,side='blue',{random=Math.random,exclude=[]}={}){
     const allies=picks[side],enemies=picks[side==='blue'?'red':'blue'];
     const weights={general:8,strategist:9,vanguard:10,assassin:8,ranger:9,pikeman:8,mage:7,dragon:7,knight:10,wolf:7};
     const score=h=>weights[h]+(h==='knight'&&allies.includes('general')||h==='general'&&allies.includes('knight')?3:0)+(h==='assassin'&&allies.includes('strategist')||h==='strategist'&&allies.includes('assassin')?3:0)+(h==='knight'&&allies.includes('vanguard')||h==='vanguard'&&allies.includes('knight')?2:0)+(h==='strategist'&&enemies.some(e=>['knight','general'].includes(e))?2:0)+(h==='ranger'&&enemies.includes('assassin')?1:0);
     // Softmax keeps the synergy preference without forcing the same maximum every game.
-    const candidates=Object.keys(R.HEROES).filter(h=>!allies.includes(h));
+    const candidates=Object.keys(R.HEROES).filter(h=>!allies.includes(h)&&!exclude.includes(h));
+    if(!candidates.length)throw Error('没有可选英雄');
     const best=Math.max(...candidates.map(score)),weightsByHero=candidates.map(h=>Math.exp((score(h)-best)/3));
     let ticket=random()*weightsByHero.reduce((a,b)=>a+b,0);
     for(let i=0;i<candidates.length;i++){ticket-=weightsByHero[i];if(ticket<0)return candidates[i];}
     return candidates.at(-1);
   }
-  const api={owner,actions,next,key,evaluate,choose,chooseHero};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.GameAI=api;
+  const api={owner,actions,next,key,evaluate,choose,chooseHero,FEATURE_NAMES,features,validProfile,setProfile,getProfile};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.GameAI=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

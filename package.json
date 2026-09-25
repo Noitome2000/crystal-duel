@@ -5,7 +5,7 @@
   "description": "晶界：浏览器三维战棋",
   "scripts": {
     "build": "node scripts/build.cjs",
-    "test": "node --test tests/rules.test.cjs tests/ai.test.cjs tests/draft.test.cjs",
+    "test": "node --test tests/rules.test.cjs tests/ai.test.cjs tests/draft.test.cjs tests/endgame.test.cjs tests/self-play.test.cjs tests/learning.test.cjs",
     "preview": "node scripts/preview.cjs"
   },
   "engines": {"node": ">=20"}

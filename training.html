@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#142b2c"><title>AI 自我对抗 · 晶界</title>
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="training.css">
+</head>
+<body class="training-page">
+<main class="training-shell">
+  <header class="training-header"><div><p class="eyebrow">CRYSTAL DUEL / SELF PLAY</p><h1>AI 自我对抗</h1><p class="intro">设置阵容，让双方自动交锋。用一批对局观察英雄与先后手的表现。</p></div><a href="index.html" class="ghost-btn">进入游戏 →</a></header>
+  <div class="training-layout">
+    <section class="training-card config-card" aria-labelledby="configTitle">
+      <p class="section-kicker">01 / 训练设置</p><h2 id="configTitle">这一轮，怎么打？</h2>
+      <form id="trainingForm">
+        <fieldset id="trainingSettings">
+          <div class="field-grid">
+            <label>模拟局数<input id="games" type="number" min="1" max="10000" step="1" value="100" required></label>
+            <label>搜索强度<select id="difficulty"><option value="fast">快速评估 · 2 层 / 350 节点</option><option value="standard">标准对战 · 4 层 / 4500 节点</option></select></label>
+          </div>
+          <label>先手安排<select id="first"><option value="alternate">交换先手 · 相邻两局保持同阵容</option><option value="random">每局随机先手</option><option value="red">固定赤方先手</option><option value="blue">固定靛方先手</option></select></label>
+          <label>随机位置的选将方式<select id="randomMode"><option value="uniform">均匀随机 · 每位可选英雄等概率</option><option value="ai">现有 AI 选将 · 考虑搭配与对手</option></select></label>
+          <p class="field-note">随机位置每局重新抽选；交换先手时每两局抽选一次。指定英雄保持固定。同阵营不重复，双方可同英雄。</p>
+          <div class="team-config red-team"><h3>赤方阵容</h3><div class="field-grid"><label>1 号位 · 上方<select id="redSlot1" data-hero-slot data-side="red" aria-label="赤方1号位"></select></label><label>2 号位 · 下方<select id="redSlot2" data-hero-slot data-side="red" aria-label="赤方2号位"></select></label></div></div>
+          <div class="team-config blue-team"><h3>靛方阵容</h3><div class="field-grid"><label>1 号位 · 上方<select id="blueSlot1" data-hero-slot data-side="blue" aria-label="靛方1号位"></select></label><label>2 号位 · 下方<select id="blueSlot2" data-hero-slot data-side="blue" aria-label="靛方2号位"></select></label></div></div>
+          <details class="advanced"><summary>更多设置</summary><div class="field-grid"><label>随机种子<input id="seed" type="number" min="0" max="4294967295" step="1" value="20260925" required></label><label>每局决策上限<input id="maxDecisions" type="number" min="20" max="10000" step="1" value="600" required></label></div><p class="field-note">用于比较同一批抽选阵容。搜索强度相同、设备耗时不同，行动仍可能有差异。大于三子的对局遇到决策上限或重复局面时记为未完成；三子残局继续执行正式检定。</p></details>
+        </fieldset>
+        <p id="formError" class="form-error" role="alert" hidden></p>
+        <div class="run-actions"><button id="startTraining" type="submit" class="primary-btn">开始模拟 →</button><button id="stopTraining" type="button" class="ghost-btn" disabled>停止并汇总</button></div>
+      </form>
+      <p class="field-note">每局逐步保存为训练数据。累计至少 20 局有胜负的数据后自动学习，并额外进行 20 局新旧版本验证；达标的新版本供正式对局使用。标准模式与正式对局使用相同搜索预算。</p>
+    </section>
+    <section class="results-column" aria-label="模拟结果">
+      <section class="training-card learning-card">
+        <div class="card-heading"><div><p class="section-kicker">LEARNING / 持续积累</p><h2 id="modelStatus">正在读取训练库…</h2></div><button id="exportDataset" class="ghost-btn" disabled>导出训练数据</button></div>
+        <p id="datasetStatus" class="field-note">训练数据保存在此浏览器的本地数据库，刷新页面后继续保留。</p>
+        <p id="learningStatus" class="run-summary" role="status">根据历史对局的最终胜负，学习英雄价值、机动和局面评估参数。新版本验证达标才会启用。</p>
+        <p class="field-note learning-note">启用门槛：20 局独立验证中至少 16 局分出胜负，新版胜率 ≥ 60% 且净胜至少 4 局。验证局也保存为数据，但只参加下一轮训练。更换浏览器、地址或清理网站数据会影响本地训练库，建议定期导出备份。</p>
+      </section>
+      <section class="training-card github-card">
+        <div class="card-heading"><div><p class="section-kicker">GITHUB / 可选云端备份</p><h2>同步到你的仓库。</h2></div><span id="githubSyncState" class="elapsed">未连接</span></div>
+        <p class="field-note">GitHub Pages 是静态网站，训练数据默认只在浏览器本地。填写一个细粒度 Token 后，页面会将完整训练数据提交到指定仓库；Token 只保留在当前页面内存，刷新后需要重新填写。</p>
+        <div class="github-fields"><label>GitHub Token（只写入当前页面）<input id="githubToken" type="password" autocomplete="off" placeholder="github_pat_…"></label><label>用户名<input id="githubOwner" value="Noitome2000" autocomplete="off"></label><label>仓库<input id="githubRepo" value="crystal-duel" autocomplete="off"></label><label>分支<input id="githubBranch" value="main" autocomplete="off"></label></div>
+        <div class="run-actions"><button id="syncGithub" type="button" class="primary-btn" disabled>提交训练数据到 GitHub →</button></div>
+        <p id="githubMessage" class="field-note" role="status">需要对目标仓库有 Contents: write 权限的 fine-grained token。同步文件：`training-data/training-dataset.json`。</p>
+      </section>
+      <section class="training-card progress-card">
+        <div class="card-heading"><div><p class="section-kicker">02 / 运行进度</p><h2 id="runStatus" role="status">等待开始</h2></div><span id="elapsed" class="elapsed">00:00</span></div>
+        <progress id="runProgress" value="0" max="100" aria-label="模拟对弈进度"></progress>
+        <p id="currentGame" class="current-game">默认 100 局，交换先后手测试。支持离线运行。</p>
+        <div class="metrics"><div><span>先手胜</span><strong id="firstWins">—</strong></div><div><span>后手胜</span><strong id="secondWins">—</strong></div><div><span>残局检定</span><strong id="adjudications">—</strong></div><div><span>未完成 / 平局</span><strong id="unfinished">—</strong></div></div>
+        <p id="runSummary" class="run-summary">结束后显示先后手比例与英雄表现。未完成对局单独统计。</p>
+      </section>
+      <section class="training-card">
+        <div class="card-heading"><div><p class="section-kicker">03 / 英雄表现</p><h2>每一次出场，都有记录。</h2></div><button id="exportReport" class="ghost-btn" disabled>导出报告</button></div>
+        <p id="scoreHelp" class="field-note">表现分 = 胜场 ÷（胜场 + 负场）× 100，50 分为胜负各半。平局、未完成不进入分母；未出场显示“—”。双方同英雄分别记录一次出场。分数包含搭档与对手的影响。</p>
+        <div class="table-scroll" tabindex="0" role="region" aria-label="英雄表现统计，可横向滚动"><table aria-describedby="scoreHelp"><thead><tr><th scope="col">英雄</th><th scope="col">表现分</th><th scope="col">出场</th><th scope="col">胜</th><th scope="col">负</th><th scope="col">平局</th><th scope="col">未完成</th><th scope="col">样本</th></tr></thead><tbody id="heroResults"></tbody></table></div>
+      </section>
+      <details class="training-card match-records"><summary>逐局结果 <span id="recordCount">0 局</span></summary><p class="field-note">页面显示最近 50 局，导出报告包含全部结果和本轮配置。</p><div class="table-scroll" tabindex="0" role="region" aria-label="逐局结果，可横向滚动"><table><thead><tr><th>局数</th><th>先手</th><th>赤方 1 / 2 号位</th><th>靛方 1 / 2 号位</th><th>结果</th><th>结束原因</th></tr></thead><tbody id="matchResults"></tbody></table></div></details>
+    </section>
+  </div>
+  <footer class="training-footer"><strong>残局规则</strong><span>场上棋子不大于 3 个后，再完成 20 步仍未分胜负，依次检定：棋子较多者胜；各一子时英雄胜士兵；同为英雄或同为士兵时后手胜。一步按一方完整行动计，连击、闪避和游击不额外计步，期间吃子不重置计数。</span></footer>
+</main>
+<script src="rules-engine.js"></script><script src="ai.js"></script><script src="draft.js"></script><script src="self-play.js"></script><script src="training-store.js"></script><script src="learning.js"></script><script src="github-sync.js"></script><script src="training.js"></script>
+</body></html>

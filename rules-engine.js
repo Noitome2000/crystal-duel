@@ -23,7 +23,7 @@
   const near=(a,b)=>Math.max(Math.abs(a.x-b.x),Math.abs(a.y-b.y))===1;
   const protectedOpening=s=>s.ply<6;
   function create(rosters={red:['general','knight'],blue:['vanguard','assassin']},first='red') {
-    const s={units:[],ply:0,side:first,first,phase:'normal',actor:null,combo:false,winner:null,cooldowns:{},pending:null,noDodge:false,events:[]};
+    const s={units:[],ply:0,side:first,first,phase:'normal',actor:null,combo:false,winner:null,victoryReason:null,endgameStartPly:null,cooldowns:{},pending:null,noDodge:false,events:[]};
     for(const side of ['red','blue']){
       const picks=rosters[side];
       if(!picks||picks.length!==2||new Set(picks).size!==2||picks.some(h=>!HEROES[h]))throw Error('每方请选择两名不同英雄');
@@ -89,18 +89,44 @@
     return trapped(s,u)?[]:paths(s,u,[1]).map(c=>({...c,kind:'move'}));
   }
   function emit(s,text){s.events.push({ply:s.ply,text});}
+  // The turn that reduces the board to <=3 units starts the clock at its end.
+  // Combo captures, dodge and retreat are parts of that same turn.
+  function trackEndgame(s,startPly=s.ply){
+    if(s.units.filter(u=>u.alive).length>3){s.endgameStartPly=null;return;}
+    if(s.endgameStartPly==null)s.endgameStartPly=startPly;
+  }
+  function endgameInfo(s){
+    const active=s.endgameStartPly!=null;
+    const steps=active?Math.max(0,s.ply-s.endgameStartPly):0;
+    return {active,steps,remaining:Math.max(0,20-steps)};
+  }
+  function end(s,winner,reason){
+    s.winner=winner;s.victoryReason=reason;s.phase='over';s.actor=null;
+    s.combo=false;s.pending=null;s.noDodge=false;
+  }
+  function adjudicate(s){
+    const red=s.units.filter(u=>u.alive&&u.side==='red'),blue=s.units.filter(u=>u.alive&&u.side==='blue');
+    let winner,reason,detail;
+    if(red.length!==blue.length){winner=red.length>blue.length?'red':'blue';reason='material';detail=`棋子数量 ${red.length} : ${blue.length}，棋子较多的一方获胜`;}
+    else if(red[0].type!==blue[0].type){winner=red[0].type==='hero'?'red':'blue';reason='hero';detail='双方各剩一子，英雄战胜士兵';}
+    else{winner=s.first==='red'?'blue':'red';reason='second';detail='双方各剩一子且种类相同，后手获胜';}
+    end(s,winner,reason);emit(s,`残局 20 步检定：${detail}。${winner==='red'?'赤方':'靛方'}获胜。`);
+  }
   function win(s){
     const r=s.units.some(u=>u.alive&&u.side==='red'),b=s.units.some(u=>u.alive&&u.side==='blue');
-    if(!r||!b){s.winner=r?'red':b?'blue':'draw';s.phase='over';s.actor=null;return true;}return false;
+    if(!r||!b){end(s,r?'red':b?'blue':'draw','elimination');return true;}return false;
   }
   function finish(s){
     if(win(s))return;
-    s.ply++;s.side=s.side==='red'?'blue':'red';s.actor=null;s.combo=false;s.pending=null;s.noDodge=false;s.phase='normal';
+    s.ply++;trackEndgame(s);
+    if(endgameInfo(s).active&&endgameInfo(s).steps>=20){adjudicate(s);return;}
+    s.side=s.side==='red'?'blue':'red';s.actor=null;s.combo=false;s.pending=null;s.noDodge=false;s.phase='normal';
     const charged=s.units.find(u=>u.alive&&u.side===s.side&&u.charged);
     if(charged){s.actor=charged.id;s.phase='bomb';emit(s,`${charged.name} 蓄力完成，请选择轰炸落点`);}
   }
   function afterAttack(s,u,target){
     if(win(s))return;
+    trackEndgame(s,s.ply+1);
     const slayer=['vanguard','wolf'].includes(u.hero);
     if(target.type==='soldier'||slayer){s.combo=true;s.actor=u.id;s.phase='combo';if(attacks(s,u).length)return;}
     endAttack(s,u);
@@ -117,6 +143,7 @@
   function apply(s,id,mode,request){
     const options=legal(s,id,mode),opt=options.find(o=>o.x===request.x&&o.y===request.y&&(!request.kind||o.kind===request.kind)&&(!request.source||o.source===request.source)&&(!request.a||o.a===request.a&&o.b===request.b));
     if(!opt)throw Error('此行动不符合规则');
+    trackEndgame(s);
     const u=get(s,id);
     if(opt.kind==='attack'){
       const target=get(s,opt.target);
@@ -136,16 +163,17 @@
     if(opt.kind==='bomb'){
       u.charged=false;cool(s,u);let n=0;s.units.forEach(e=>{if(e.alive&&e.id!==id&&Math.abs(e.x-u.x)<=1&&Math.abs(e.y-u.y)<=1){e.alive=false;n++;}});emit(s,`巨龙轰炸，摧毁 ${n} 个单位`);
     }else{if(opt.source)cool(s,get(s,opt.source));emit(s,`${u.name} ${ {move:'移动',retreat:'游击',speed:'神速',vault:'陷阵',teleport:'瞬移',push:'推进'}[opt.kind]}至 ${String.fromCharCode(65+u.x)}${u.y+1}`);}
-    finish(s);return {kind:opt.kind,opt};
+    trackEndgame(s,s.ply+1);finish(s);return {kind:opt.kind,opt};
   }
   function decline(s){
     if(s.winner)return false;
+    if(['dodge','combo','retreat'].includes(s.phase))trackEndgame(s);
     if(s.phase==='dodge'){const p=s.pending;s.pending=null;s.phase=p.phase;s.combo=p.combo;s.actor=p.actor;s.noDodge=true;capture(s,get(s,p.actor),p.opt);return true;}
     if(s.phase==='combo'){endAttack(s,get(s,s.actor));return true;}
     if(s.phase==='retreat'){finish(s);return true;}return false;
   }
   function hasActions(s){return s.units.filter(u=>u.alive&&u.side===s.side).some(u=>['move','attack','skill'].some(m=>legal(s,u.id,m).length));}
-  function pass(s){if(s.phase!=='normal'||hasActions(s)||s.winner)throw Error('仍有合法行动，不能跳过');emit(s,'无合法行动，交接行动权');finish(s);}
-  const api={HEROES,CELLS,DIRS,create,inside,at,get,near,trapped,legal,apply,decline,pass,hasActions,protectedOpening,ready,key};
+  function pass(s){if(s.phase!=='normal'||hasActions(s)||s.winner)throw Error('仍有合法行动，不能跳过');trackEndgame(s);emit(s,'无合法行动，交接行动权');finish(s);}
+  const api={HEROES,CELLS,DIRS,create,inside,at,get,near,trapped,legal,apply,decline,pass,hasActions,protectedOpening,ready,key,endgameInfo};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.Rules=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
