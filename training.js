@@ -10,8 +10,9 @@
     storedGames=await Store.count();const profile=await Store.champion();
     if(profile&&!GameAI.validProfile(profile))throw Error('已存储的模型不兼容当前规则');
     $('modelStatus').textContent=profile?`正在使用 · 训练版本 ${profile.version}`:'正在使用 · 内置策略';
-    $('datasetStatus').textContent=`本地已保存 ${storedGames} 局逐步记录。包含阵容、先后手、每次行动、学习特征及最终结果。`;$('exportDataset').disabled=!storedGames;return profile;
+    $('datasetStatus').textContent=`本地已保存 ${storedGames} 局逐步记录。包含阵容、先后手、每次行动、学习特征及最终结果。`;$('exportDataset').disabled=!storedGames;renderFolderStatus();return profile;
   }
+  function renderFolderStatus(){const status=Store.fileStatus();$('connectFolder').textContent=status.connected?'重新连接训练文件夹':'选择本地训练文件夹';$('folderStatus').textContent=status.connected?`已连接：${status.name}/${status.fileName}。训练数据和模型会自动写回此文件。${status.error?` ${status.error}`:''}`:status.supported?'未连接文件夹。连接后会自动保存训练数据和训练模型到 crystal-duel-training.json。':'当前 Edge 环境不支持直接写入文件夹，请使用导入 / 导出 JSON。';}
   async function saveGame(runId,result,metadata){
     await Store.saveGame(runId,result,metadata);storedGames++;
     $('datasetStatus').textContent=`本地已保存 ${storedGames} 局逐步记录，本轮数据正在持续写入。`;$('exportDataset').disabled=false;
@@ -109,6 +110,9 @@
     download(lastReport,`晶界-自我对抗-${lastReport.startedAt.replace(/[:.]/g,'-')}.json`);
   });
   $('exportDataset').addEventListener('click',async()=>{try{download(await Store.exportDataset(),`晶界-训练数据-${Date.now()}.json`);}catch(error){$('formError').textContent=error.message;$('formError').hidden=false;}});
+  $('connectFolder').addEventListener('click',async()=>{const button=$('connectFolder');button.disabled=true;try{await Store.connectFolder();await refreshLibrary();$('learningStatus').textContent='本地训练文件夹已连接；后续对局和模型会自动保存到文件。';}catch(error){$('formError').textContent=`连接训练文件夹失败：${error.message}`;$('formError').hidden=false;}finally{button.disabled=false;renderFolderStatus();}});
+  $('importDataset').addEventListener('click',()=>$('datasetFile').click());
+  $('datasetFile').addEventListener('change',async event=>{const file=event.target.files?.[0];if(!file)return;try{await Store.importDataset(JSON.parse(await file.text()));await refreshLibrary();$('learningStatus').textContent='训练数据和模型已从 JSON 文件导入本地库。';}catch(error){$('formError').textContent=`导入失败：${error.message}`;$('formError').hidden=false;}finally{event.target.value='';}});
   $('githubToken').addEventListener('input',()=>{$('syncGithub').disabled=!$('githubToken').value.trim()||running;});
   $('syncGithub').addEventListener('click',async()=>{
     const button=$('syncGithub');button.disabled=true;$('githubSyncState').textContent='同步中';$('githubMessage').textContent='正在读取本地训练数据并提交到 GitHub…';
@@ -116,6 +120,6 @@
     }catch(error){$('githubSyncState').textContent='失败';$('githubMessage').textContent=`同步失败：${error.message}`;}finally{button.disabled=!$('githubToken').value.trim()||running;}
   });
   window.addEventListener('beforeunload',event=>{if(running){event.preventDefault();event.returnValue='';}});
-  syncSlots();renderHeroes(SP.createReport(SP.normalize()));
-  $('startTraining').disabled=true;refreshLibrary().then(()=>{$('startTraining').disabled=false;}).catch(error=>{$('formError').textContent=`训练数据存储不可用：${error.message}`;$('formError').hidden=false;$('modelStatus').textContent='无法打开本地训练库';});
+  syncSlots();renderHeroes(SP.createReport(SP.normalize()));renderFolderStatus();
+  $('startTraining').disabled=true;Store.restoreFolder().then(()=>refreshLibrary()).then(()=>{$('startTraining').disabled=false;}).catch(error=>{$('formError').textContent=`训练数据存储不可用：${error.message}`;$('formError').hidden=false;$('modelStatus').textContent='无法打开本地训练库';$('startTraining').disabled=false;});
 })();

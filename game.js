@@ -8,7 +8,7 @@
   let opponent='ai',aiBusy=false,aiTimer=null,aiEpoch=0,aiError=false,aiStepBusy=false,hintAction=null,hintEpoch=0,wheelOpen=true,wheelDismissed=false;
   const positionHistory=[];
   async function refreshTrainedModel(){
-    try{const profile=await TrainingStore.champion();GameAI.setProfile(profile||null);$('aiModelStatus').textContent=profile?`AI · 训练版本 ${profile.version}`:'AI · 内置策略';}
+    try{await TrainingStore.restoreFolder();const profile=await TrainingStore.champion();GameAI.setProfile(profile||null);$('aiModelStatus').textContent=profile?`AI · 训练版本 ${profile.version}`:'AI · 内置策略';}
     catch(error){$('aiModelStatus').textContent='AI · 训练库暂不可读';console.warn('Training model unavailable:',error.message);}
   }
   window.addEventListener('focus',refreshTrainedModel);

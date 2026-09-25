@@ -34,6 +34,8 @@
       <section class="training-card learning-card">
         <div class="card-heading"><div><p class="section-kicker">LEARNING / 持续积累</p><h2 id="modelStatus">正在读取训练库…</h2></div><button id="exportDataset" class="ghost-btn" disabled>导出训练数据</button></div>
         <p id="datasetStatus" class="field-note">训练数据保存在此浏览器的本地数据库，刷新页面后继续保留。</p>
+        <div class="local-folder-row"><button id="connectFolder" type="button" class="primary-btn">选择本地训练文件夹</button><button id="importDataset" type="button" class="ghost-btn">导入 JSON</button><input id="datasetFile" type="file" accept="application/json,.json" hidden></div>
+        <p id="folderStatus" class="field-note">未连接文件夹。连接后会自动保存训练数据和训练模型到 crystal-duel-training.json。</p>
         <p id="learningStatus" class="run-summary" role="status">根据历史对局的最终胜负，学习英雄价值、机动和局面评估参数。新版本验证达标才会启用。</p>
         <p class="field-note learning-note">启用门槛：20 局独立验证中至少 16 局分出胜负，新版胜率 ≥ 60% 且净胜至少 4 局。验证局也保存为数据，但只参加下一轮训练。更换浏览器、地址或清理网站数据会影响本地训练库，建议定期导出备份。</p>
       </section>
