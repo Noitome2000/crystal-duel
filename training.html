@@ -58,6 +58,18 @@
         <p id="scoreHelp" class="field-note">表现分 = 胜场 ÷（胜场 + 负场）× 100，50 分为胜负各半。平局、未完成不进入分母；未出场显示“—”。双方同英雄分别记录一次出场。分数包含搭档与对手的影响。</p>
         <div class="table-scroll" tabindex="0" role="region" aria-label="英雄表现统计，可横向滚动"><table aria-describedby="scoreHelp"><thead><tr><th scope="col">英雄</th><th scope="col">表现分</th><th scope="col">出场</th><th scope="col">胜</th><th scope="col">负</th><th scope="col">平局</th><th scope="col">未完成</th><th scope="col">样本</th></tr></thead><tbody id="heroResults"></tbody></table></div>
       </section>
+      <section class="training-card" aria-labelledby="combinationTitle">
+        <div class="card-heading"><div><p class="section-kicker">04 / 英雄组合</p><h2 id="combinationTitle">两位英雄，一起看表现。</h2></div><button id="exportStatistics" type="button" class="ghost-btn" disabled>导出组合统计</button></div>
+        <div class="statistics-controls">
+          <label>统计范围<select id="statisticsScope"><option value="history">历史累计</option><option value="current">本轮模拟</option></select></label>
+          <label>排序<select id="combinationSort"><option value="score">表现分从高到低</option><option value="appearances">出场次数从多到少</option><option value="wins">胜场从多到少</option><option value="name">组合名称</option></select></label>
+          <label>包含英雄<select id="combinationHero"><option value="all">全部英雄</option></select></label>
+        </div>
+        <p id="combinationHelp" class="field-note">共 45 种双英雄组合，合并上下位置；逐局记录仍保留位置。同阵容对阵时双方各记一次出场。表现分 = 胜 ÷（胜 + 负）× 100，平局和未完成不计入分母；先手 / 后手列显示胜率与已分胜负样本数。</p>
+        <p id="statisticsSummary" class="field-note" role="status">正在读取历史组合统计…</p>
+        <div class="table-scroll statistics-table" tabindex="0" role="region" aria-label="英雄组合统计，可横向滚动"><table aria-describedby="combinationHelp statisticsSummary"><thead><tr><th scope="col">组合</th><th scope="col">表现分</th><th scope="col">出场</th><th scope="col">胜</th><th scope="col">负</th><th scope="col">平局</th><th scope="col">未完成</th><th scope="col">先手胜率 / 样本</th><th scope="col">后手胜率 / 样本</th><th scope="col">样本</th></tr></thead><tbody id="combinationResults"></tbody></table></div>
+        <details class="match-records matchup-details"><summary>组合对阵明细 <span id="matchupCount">0 种对阵</span></summary><p class="field-note">按赤方组合 × 靛方组合统计，交换颜色另列一行。表现分从赤方视角计算；筛选英雄匹配任意一方。历史累计汇总当前规则的自我对抗，排除新旧模型验证局；不同搜索强度和模型的记录会合并，仅用于观察。</p><div class="table-scroll statistics-table" tabindex="0" role="region" aria-label="组合对阵明细，可横向滚动"><table><thead><tr><th scope="col">赤方组合</th><th scope="col">靛方组合</th><th scope="col">赤方表现分</th><th scope="col">局数</th><th scope="col">赤方胜</th><th scope="col">靛方胜</th><th scope="col">平局</th><th scope="col">未完成</th><th scope="col">先手胜</th><th scope="col">后手胜</th></tr></thead><tbody id="matchupResults"></tbody></table></div></details>
+      </section>
       <details class="training-card match-records"><summary>逐局结果 <span id="recordCount">0 局</span></summary><p class="field-note">页面显示最近 50 局，导出报告包含全部结果和本轮配置。</p><div class="table-scroll" tabindex="0" role="region" aria-label="逐局结果，可横向滚动"><table><thead><tr><th>局数</th><th>先手</th><th>赤方 1 / 2 号位</th><th>靛方 1 / 2 号位</th><th>结果</th><th>结束原因</th></tr></thead><tbody id="matchResults"></tbody></table></div></details>
     </section>
   </div>

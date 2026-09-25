@@ -28,7 +28,11 @@
   }
   async function mergeDataset(dataset){
     const db=await open();return new Promise((resolve,reject)=>{const tx=db.transaction(['games','models','runs','meta'],'readwrite');
-      for(const [store,items]of [['games',dataset.games],['models',dataset.models],['runs',dataset.runs],['meta',dataset.meta]])for(const item of items)tx.objectStore(store).put(item);
+      for(const [store,items]of [['games',dataset.games],['models',dataset.models],['runs',dataset.runs],['meta',dataset.meta]])for(const item of items){
+        // A directory handle belongs to this browser, and cannot survive JSON serialization.
+        if(store==='meta'&&item.key==='directoryHandle')continue;
+        tx.objectStore(store).put(item);
+      }
       tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||Error('合并本地训练文件失败'));
     });
   }
@@ -51,7 +55,14 @@
     }).then(value=>{if(value)queueFileWrite();return value;});
   }
   async function saveRun(id,report){const results=report.results.map(({trajectory,...result})=>result);const value={...report,results,id};await put('runs',value);queueFileWrite();return value;}
-  async function exportDataset(){const [games,models,runs,meta]=await Promise.all([all('games'),all('models'),all('runs'),all('meta')]);return {schema:1,ruleVersion:RULE_VERSION,exportedAt:new Date().toISOString(),games,models,runs,meta};}
+  async function statistics(){
+    const report=root.SelfPlay.createHistory(),db=await open();
+    return new Promise((resolve,reject)=>{const req=db.transaction('games').objectStore('games').openCursor();
+      req.onsuccess=()=>{const cursor=req.result;if(!cursor){resolve(report);return;}root.SelfPlay.recordHistory(report,cursor.value);cursor.continue();};
+      req.onerror=()=>reject(req.error);
+    });
+  }
+  async function exportDataset(){const [games,models,runs,meta]=await Promise.all([all('games'),all('models'),all('runs'),all('meta')]);return {schema:1,ruleVersion:RULE_VERSION,exportedAt:new Date().toISOString(),games,models,runs,meta:meta.filter(item=>item.key!=='directoryHandle'),...(root.SelfPlay?{statistics:root.SelfPlay.summarize(games)}:{})};}
   async function flushFile(){
     if(!directoryHandle)return false;clearTimeout(writeTimer);writeTimer=null;
     const run=writeQueue.then(async()=>{if(!await hasPermission(directoryHandle))throw Error('请重新授权训练文件夹');const data=await exportDataset(),handle=await directoryHandle.getFileHandle(FILE_NAME,{create:true}),writer=await handle.createWritable();await writer.write(JSON.stringify(data));await writer.close();folderError='';return true;});
@@ -72,5 +83,5 @@
   }
   async function importDataset(dataset){if(!dataset||dataset.schema!==1||!Array.isArray(dataset.games)||!Array.isArray(dataset.models)||!Array.isArray(dataset.runs)||!Array.isArray(dataset.meta))throw Error('训练数据文件格式不兼容');await mergeDataset(dataset);if(directoryHandle)await flushFile();return count();}
   async function saveModel(profile){await put('models',profile);queueFileWrite();return profile;}
-  root.TrainingStore={open,count,saveGame,recentGames,champion,promote,saveRun,saveModel,exportDataset,importDataset,restoreFolder,connectFolder,flushFile,fileStatus,FILE_NAME};
+  root.TrainingStore={open,count,saveGame,recentGames,champion,promote,saveRun,saveModel,statistics,exportDataset,importDataset,restoreFolder,connectFolder,flushFile,fileStatus,FILE_NAME};
 })(typeof globalThis!=='undefined'?globalThis:this);

@@ -1,4 +1,5 @@
 @charset "UTF-8";
+.statistics-controls{display:flex;flex-wrap:wrap;gap:12px}.statistics-controls label{flex:1 1 150px}.statistics-table{max-height:480px}.statistics-table thead{position:sticky;top:0;background:#192f31;z-index:1}.matchup-details{margin-top:20px;padding-top:14px;border-top:1px solid var(--line)}
 .learning-note{margin:14px 0 0}.learning-card .run-summary{margin-top:0}
 .local-folder-row{display:flex;gap:9px;flex-wrap:wrap;margin:10px 0 2px}.local-folder-row button{font-size:11px;padding:9px 12px}.folder-status{color:var(--muted)}
 .github-fields{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px}.github-fields label{margin-bottom:0}.github-card .run-actions{margin-top:16px}.github-card .primary-btn{width:auto}.github-card code{color:var(--gold)}

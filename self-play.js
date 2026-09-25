@@ -43,13 +43,24 @@
     return {red:draft.picks.red.slice(),blue:draft.picks.blue.slice()};
   }
   function createReport(config){
-    return {version:1,ruleVersion:'endgame-20-ply-v1',config,search:{...PRESETS[config.difficulty]},status:'running',startedAt:new Date().toISOString(),elapsedMs:0,
+    return {version:2,ruleVersion:'endgame-20-ply-v1',config,search:{...PRESETS[config.difficulty]},status:'running',startedAt:new Date().toISOString(),elapsedMs:0,
       completed:0,firstWins:0,secondWins:0,redWins:0,blueWins:0,draws:0,unfinished:0,adjudications:0,firstScore:null,
       scoreDefinition:'英雄所在阵容胜场 /（胜场 + 负场）× 100；平局、未完成不计入分母；双方同英雄分别记一次出场。',
-      heroes:Object.fromEntries(HEROES.map(id=>[id,{id,name:R.HEROES[id].name,appearances:0,wins:0,losses:0,draws:0,unfinished:0,score:null}])),results:[]};
+      combinationDefinition:'同一方两位英雄为一个组合，不区分上下位置；镜像阵容分别记两次出场。对阵按赤方组合与靛方组合分别统计。胜率仅以胜负局为分母。',
+      heroes:Object.fromEntries(HEROES.map(id=>[id,{id,name:R.HEROES[id].name,...emptyStats()}])),
+      combinations:Object.fromEntries(HEROES.flatMap((id,i)=>HEROES.slice(i+1).map(other=>{const key=comboKey([id,other]);return [key,{key,name:comboName(key),...emptyStats(),first:emptyStats(),second:emptyStats()}];}))),matchups:{},results:[]};
   }
-  function record(report,result){
-    report.results.push(result);report.completed++;
+  function emptyStats(){return {appearances:0,wins:0,losses:0,draws:0,unfinished:0,score:null};}
+  function comboKey(picks){return picks.slice().sort().join('+');}
+  function comboName(key){return key.split('+').map(id=>R.HEROES[id]?.name||id).join(' + ');}
+  function ensureStats(map,key,name){return map[key]??={key,name,...emptyStats()};}
+  function updateStats(stats,result,win){
+    stats.appearances++;
+    stats[!result.winner?'unfinished':result.winner==='draw'?'draws':win?'wins':'losses']++;
+    stats.score=stats.wins+stats.losses?100*stats.wins/(stats.wins+stats.losses):null;
+  }
+  function record(report,result,{retainResults=true}={}){
+    if(retainResults)report.results.push(result);report.completed++;
     if(result.winner==='red'||result.winner==='blue'){
       report[result.winner+'Wins']++;report[result.winner===result.first?'firstWins':'secondWins']++;
       if(['material','hero','second'].includes(result.reason))report.adjudications++;
@@ -59,8 +70,26 @@
       h[!result.winner?'unfinished':result.winner==='draw'?'draws':result.winner===side?'wins':'losses']++;
       h.score=h.wins+h.losses?100*h.wins/(h.wins+h.losses):null;
     }
+    const redKey=comboKey(result.rosters.red),blueKey=comboKey(result.rosters.blue),redCombo=ensureStats(report.combinations,redKey,comboName(redKey)),blueCombo=ensureStats(report.combinations,blueKey,comboName(blueKey));
+    updateStats(redCombo,result,result.winner==='red');updateStats(blueCombo,result,result.winner==='blue');
+    updateStats(redCombo[result.first==='red'?'first':'second'],result,result.winner==='red');
+    updateStats(blueCombo[result.first==='blue'?'first':'second'],result,result.winner==='blue');
+    const matchupKey=`${redKey}__vs__${blueKey}`,matchup=ensureStats(report.matchups,matchupKey,`${redCombo.name}  vs  ${blueCombo.name}`);
+    matchup.redKey=redKey;matchup.blueKey=blueKey;
+    updateStats(matchup,result,result.winner==='red');matchup.redWins=(matchup.redWins||0)+(result.winner==='red'?1:0);matchup.blueWins=(matchup.blueWins||0)+(result.winner==='blue'?1:0);
+    matchup.firstWins=(matchup.firstWins||0)+(['red','blue'].includes(result.winner)&&result.winner===result.first?1:0);
+    matchup.secondWins=(matchup.secondWins||0)+(['red','blue'].includes(result.winner)&&result.winner!==result.first?1:0);
     report.firstScore=report.firstWins+report.secondWins?100*report.firstWins/(report.firstWins+report.secondWins):null;
   }
+  function historicalGame(game){
+    return !!game&&game.ruleVersion==='endgame-20-ply-v1'&&(!game.purpose||game.purpose==='self-play')&&
+      ['red','blue'].includes(game.first)&&[null,undefined,'red','blue','draw'].includes(game.winner)&&
+      ['red','blue'].every(side=>Array.isArray(game.rosters?.[side])&&game.rosters[side].length===2&&
+        new Set(game.rosters[side]).size===2&&game.rosters[side].every(id=>HEROES.includes(id)));
+  }
+  function createHistory(){return {...createReport(normalize()),config:null,search:null,status:'history',scope:'history',excluded:0};}
+  function recordHistory(report,game){if(historicalGame(game))record(report,game,{retainResults:false});else report.excluded++;}
+  function summarize(games){const report=createHistory();for(const game of games)recordHistory(report,game);return report;}
   async function playGame(rosters,first,config,{cancelled=()=>false,onStep=()=>{},choose=AI.choose,initialState}={}){
     let state=initialState?JSON.parse(JSON.stringify(initialState)):R.create(rosters,first),decisions=0,reason=null;
     const trajectory=[];
@@ -98,6 +127,6 @@
       report.status=cancelled()?'stopped':'complete';update(null);return report;
     }catch(error){report.status='error';report.error=error.message;update(null);error.report=report;throw error;}
   }
-  const api={PRESETS,normalize,seededRandom,draftRoster,createReport,record,playGame,run};
+  const api={PRESETS,normalize,seededRandom,draftRoster,createReport,record,comboKey,createHistory,recordHistory,summarize,playGame,run};
   if(node)module.exports=api;else root.SelfPlay=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
