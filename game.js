@@ -55,7 +55,7 @@
   }
   function makeBoard(){
     for(const c of R.cellsOf(state)){
-      const hero=state.mode==='battle'?(c.x===2||c.x===4):(c.x===0||c.x===5),soldier=state.mode==='battle'?(c.x===1||c.x===5):(c.x===1||c.x===4);
+      const hero=state.mode==='battle'?(c.y===-1||c.y===4):(c.x===0||c.x===5),soldier=state.mode==='battle'?(c.y===0||c.y===3):(c.x===1||c.x===4);
       add(tileGroup,new THREE.BoxGeometry(.96,.18,.96),material(0x182e2d,.45),c.x,-.12,c.y);
       const tile=add(tileGroup,new THREE.BoxGeometry(.91,.12,.91),material(hero?0x508a99:soldier?0x718969:((c.x+c.y)%2?0x829184:0x9aa48e),.15),c.x,.01,c.y);tile.userData.cell=c;tileMeshes.push(tile);
       const rim=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(.91,.12,.91)),new THREE.LineBasicMaterial({color:hero?0x96d3cf:0xc2bc92,transparent:true,opacity:.32}));rim.position.copy(tile.position);tileGroup.add(rim);

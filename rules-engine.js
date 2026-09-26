@@ -39,10 +39,9 @@
       const picks=rosters[side];
       if(!picks||picks.length!==cfg.heroes||new Set(picks).size!==cfg.heroes||picks.some(h=>!HEROES[h]))throw Error(`每方请选择${cfg.heroes}名不同英雄`);
       if(mode==='battle'){
-        const sx=side==='red'?1:5, hx=side==='red'?2:4;
-        for(let y=0;y<4;y++)s.units.push({id:`${side}-s${y}`,side,type:'soldier',name:`士兵 ${y+1}`,x:sx,y,alive:true});
-        s.units.push({id:`${side}-s4`,side,type:'soldier',name:'士兵 5',x:side==='red'?2:4,y:side==='red'?3:0,alive:true});
-        picks.forEach((h,i)=>s.units.push({id:`${side}-${h}`,side,type:'hero',hero:h,name:HEROES[h].name,x:hx,y:i,alive:true}));
+        const soldierY=side==='red'?0:3,heroY=side==='red'?-1:4;
+        for(let x=1;x<=5;x++)s.units.push({id:`${side}-s${x-1}`,side,type:'soldier',name:`士兵 ${x}`,x,y:soldierY,alive:true});
+        picks.forEach((h,i)=>s.units.push({id:`${side}-${h}`,side,type:'hero',hero:h,name:HEROES[h].name,x:i+2,y:heroY,alive:true}));
       }else{
         for(let y=0;y<4;y++)s.units.push({id:`${side}-s${y}`,side,type:'soldier',name:`士兵 ${y+1}`,x:side==='red'?1:4,y,alive:true});
         picks.forEach((h,i)=>s.units.push({id:`${side}-${h}`,side,type:'hero',hero:h,name:HEROES[h].name,x:side==='red'?0:5,y:i+1,alive:true}));

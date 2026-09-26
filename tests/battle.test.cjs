@@ -19,6 +19,10 @@ test('battle deployment creates three heroes and five soldiers per side',()=>{
   for(const side of ['red','blue']){
     assert.equal(s.units.filter(u=>u.side===side&&u.type==='hero').length,3);
     assert.equal(s.units.filter(u=>u.side===side&&u.type==='soldier').length,5);
+    const heroes=s.units.filter(u=>u.side===side&&u.type==='hero');
+    const soldiers=s.units.filter(u=>u.side===side&&u.type==='soldier');
+    assert.ok(heroes.every(u=>u.y===(side==='red'?-1:4)&&u.x>=2&&u.x<=4));
+    assert.ok(soldiers.every(u=>u.y===(side==='red'?0:3)&&u.x>=1&&u.x<=5));
   }
   assert.ok(s.units.every(u=>R.cellsOf(s).some(c=>c.x===u.x&&c.y===u.y)));
 });
