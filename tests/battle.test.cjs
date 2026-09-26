@@ -25,8 +25,15 @@ test('battle deployment creates three heroes and five soldiers per side',()=>{
 
 test('battle draft requires six picks',()=>{
   const d=D.create('battle');D.toss(d,0);
-  for(const [side,hero] of [['red','general'],['blue','vanguard'],['red','knight'],['blue','assassin'],['red','mage'],['blue','ranger']])D.choose(d,side,hero);
+  const order=[];for(const [side,hero] of [['red','general'],['blue','vanguard'],['red','knight'],['blue','assassin'],['red','mage'],['blue','ranger']]){order.push(D.current(d).side);D.choose(d,side,hero);}
+  assert.deepEqual(order,['red','blue','red','blue','red','blue']);
   assert.equal(d.stage,'ready');assert.equal(d.picks.red.length,3);assert.equal(d.picks.blue.length,3);
+});
+
+test('battle reports only three-hero combinations',()=>{
+  const report=SP.createReport(SP.normalize({mode:'battle'}));
+  assert.equal(Object.keys(report.combinations).length,120);
+  assert.ok(Object.keys(report.combinations).every(key=>key.split('+').length===3));
 });
 
 test('battle self-play config and AI produce a legal action',async()=>{

@@ -45,12 +45,20 @@
     return {red:draft.picks.red.slice(),blue:draft.picks.blue.slice()};
   }
   function createReport(config){
+    const combinationSize=config?.mode==='battle'?3:2;
+    const combinations={};
+    for(let i=0;i<HEROES.length;i++)for(let j=i+1;j<HEROES.length;j++)for(let k=j+1;k<HEROES.length&&combinationSize===3;k++){
+      const key=comboKey([HEROES[i],HEROES[j],HEROES[k]]);combinations[key]={key,name:comboName(key),...emptyStats(),first:emptyStats(),second:emptyStats()};
+    }
+    if(combinationSize===2)for(let i=0;i<HEROES.length;i++)for(let j=i+1;j<HEROES.length;j++){
+      const key=comboKey([HEROES[i],HEROES[j]]);combinations[key]={key,name:comboName(key),...emptyStats(),first:emptyStats(),second:emptyStats()};
+    }
     return {version:2,ruleVersion:'endgame-20-ply-v1',config,search:{...PRESETS[config.difficulty]},status:'running',startedAt:new Date().toISOString(),elapsedMs:0,
       completed:0,firstWins:0,secondWins:0,redWins:0,blueWins:0,draws:0,unfinished:0,adjudications:0,firstScore:null,
       scoreDefinition:'英雄所在阵容胜场 /（胜场 + 负场）× 100；平局、未完成不计入分母；双方同英雄分别记一次出场。',
       combinationDefinition:'同一方英雄阵容为一个组合，不区分位置；镜像阵容分别记两次出场。对阵按赤方组合与靛方组合分别统计。胜率仅以胜负局为分母。',
       heroes:Object.fromEntries(HEROES.map(id=>[id,{id,name:R.HEROES[id].name,...emptyStats(),first:emptyStats(),second:emptyStats()}])),
-      combinations:Object.fromEntries(HEROES.flatMap((id,i)=>HEROES.slice(i+1).map(other=>{const key=comboKey([id,other]);return [key,{key,name:comboName(key),...emptyStats(),first:emptyStats(),second:emptyStats()}];}))),matchups:{},results:[]};
+      combinations,matchups:{},results:[]};
   }
   function emptyStats(){return {appearances:0,wins:0,losses:0,draws:0,unfinished:0,score:null};}
   function comboKey(picks){return picks.slice().sort().join('+');}
