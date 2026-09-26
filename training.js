@@ -57,12 +57,13 @@
     select.addEventListener('change',syncSlots);
   }
   function syncSlots(){
+    const battle=$('mode').value==='battle';document.querySelectorAll('.battle-slot').forEach(el=>el.hidden=!battle);
     for(const side of ['red','blue']){
-      const selects=[$(side+'Slot1'),$(side+'Slot2')];
-      selects.forEach((select,index)=>{for(const option of select.options)option.disabled=option.value!=='random'&&option.value===selects[1-index].value;});
+      const selects=[$(side+'Slot1'),$(side+'Slot2'),$(side+'Slot3')].slice(0,battle?3:2);
+      selects.forEach((select,index)=>{for(const option of select.options)option.disabled=option.value!=='random'&&selects.some((other,j)=>j!==index&&other.value===option.value);});
     }
   }
-  function options(){return {games:$('games').value,difficulty:$('difficulty').value,first:$('first').value,randomMode:$('randomMode').value,seed:$('seed').value,maxDecisions:$('maxDecisions').value,slots:{red:[$('redSlot1').value,$('redSlot2').value],blue:[$('blueSlot1').value,$('blueSlot2').value]}};}
+  function options(){const battle=$('mode').value==='battle';return {games:$('games').value,mode:$('mode').value,difficulty:$('difficulty').value,first:$('first').value,randomMode:$('randomMode').value,seed:$('seed').value,maxDecisions:$('maxDecisions').value,slots:{red:[$('redSlot1').value,$('redSlot2').value,...(battle?[$('redSlot3').value]:[])],blue:[$('blueSlot1').value,$('blueSlot2').value,...(battle?[$('blueSlot3').value]:[])]}};}
   function clock(ms){const seconds=Math.floor(ms/1000);return `${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`;}
   function cell(row,text,className){const td=document.createElement('td');td.textContent=text;if(className)td.className=className;row.appendChild(td);}
   function selectedHeroStatistics(){return $('heroStatisticsScope').value==='history'?historyReport:lastReport;}
@@ -161,6 +162,7 @@
     catch(error){$('formError').textContent=`运行中断：${error.message}。本轮内存报告仍可导出，已成功写入的历史记录保留。`;$('formError').hidden=false;$('learningStatus').textContent='运行发生错误，未启用未经验证的模型。';}
     finally{running=false;setLibraryControls();$('trainingSettings').disabled=false;$('stopTraining').disabled=true;if(lastReport)$('runStatus').textContent=`${lastReport.status==='complete'?'模拟完成':lastReport.status==='stopped'?'已停止':'运行中断'} · ${lastReport.completed} / ${lastReport.config.games} 局`;syncSlots();}
   });
+  $('mode').addEventListener('change',()=>{for(const side of ['red','blue']){const slot=$(`${side}Slot3`);if(slot&&$('mode').value==='battle'&&!slot.value)slot.value='random';}syncSlots();});
   $('stopTraining').addEventListener('click',()=>{if(!running)return;stopRequested=true;$('stopTraining').disabled=true;$('runStatus').textContent='正在停止并汇总…';});
   $('exportReport').addEventListener('click',()=>{
     if(!lastReport?.completed)return;

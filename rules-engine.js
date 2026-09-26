@@ -14,21 +14,39 @@
     knight:{name:'骑士',skill:'神速 / 荣耀',desc:'神速：连续移动两格，可转弯，途中不能穿越棋子，开局即可使用。荣耀：周围己方士兵共享神速，并使用骑士的冷却，开局同样生效。'},
     wolf:{name:'狼灭',skill:'残忍 / 斩将',desc:'残忍：攻击目标也可选择己方棋子。斩将：击破英雄后也能继续连击，连击目标可以是士兵或英雄。'}
   };
-  const CELLS=[];
-  for(let y=0;y<4;y++)for(let x=0;x<6;x++)if(x>0&&x<5||y===1||y===2)CELLS.push({x,y});
+  const CLASSIC_CELLS=[];
+  for(let y=0;y<4;y++)for(let x=0;x<6;x++)if(x>0&&x<5||y===1||y===2)CLASSIC_CELLS.push({x,y});
+  // Battle map: a 4x5 central field with three raised cells above and below.
+  const BATTLE_CELLS=[];
+  for(let y=0;y<4;y++)for(let x=1;x<=5;x++)BATTLE_CELLS.push({x,y});
+  for(const x of [2,3,4]){BATTLE_CELLS.push({x,y:-1});BATTLE_CELLS.push({x,y:4});}
+  const CELLS=CLASSIC_CELLS;
+  const MODES={classic:{heroes:2,soldiers:4,cells:CLASSIC_CELLS},battle:{heroes:3,soldiers:5,cells:BATTLE_CELLS}};
   const key=c=>`${c.x},${c.y}`, same=(a,b)=>a.x===b.x&&a.y===b.y;
-  const inside=(x,y)=>CELLS.some(c=>c.x===x&&c.y===y);
+  const modeOf=s=>MODES[s?.mode]||MODES.classic;
+  const cellsOf=s=>modeOf(s).cells;
+  const inside=(x,y)=>CLASSIC_CELLS.some(c=>c.x===x&&c.y===y);
+  const insideState=(s,x,y)=>cellsOf(s).some(c=>c.x===x&&c.y===y);
   const at=(s,x,y)=>s.units.find(u=>u.alive&&u.x===x&&u.y===y);
   const get=(s,id)=>s.units.find(u=>u.id===id);
   const near=(a,b)=>Math.max(Math.abs(a.x-b.x),Math.abs(a.y-b.y))===1;
   const protectedOpening=s=>s.ply<6;
-  function create(rosters={red:['general','knight'],blue:['vanguard','assassin']},first='red') {
-    const s={units:[],ply:0,side:first,first,phase:'normal',actor:null,combo:false,winner:null,victoryReason:null,endgameStartPly:null,cooldowns:{},pending:null,noDodge:false,events:[]};
+  function create(rosters={red:['general','knight'],blue:['vanguard','assassin']},first='red',mode='classic') {
+    if(typeof mode==='object'){mode=mode.mode||'classic';}
+    if(!MODES[mode])throw Error('未知对局模式');
+    const cfg=MODES[mode],s={mode,units:[],ply:0,side:first,first,phase:'normal',actor:null,combo:false,winner:null,victoryReason:null,endgameStartPly:null,cooldowns:{},pending:null,noDodge:false,events:[]};
     for(const side of ['red','blue']){
       const picks=rosters[side];
-      if(!picks||picks.length!==2||new Set(picks).size!==2||picks.some(h=>!HEROES[h]))throw Error('每方请选择两名不同英雄');
-      for(let y=0;y<4;y++)s.units.push({id:`${side}-s${y}`,side,type:'soldier',name:`士兵 ${y+1}`,x:side==='red'?1:4,y,alive:true});
-      picks.forEach((h,i)=>s.units.push({id:`${side}-${h}`,side,type:'hero',hero:h,name:HEROES[h].name,x:side==='red'?0:5,y:i+1,alive:true}));
+      if(!picks||picks.length!==cfg.heroes||new Set(picks).size!==cfg.heroes||picks.some(h=>!HEROES[h]))throw Error(`每方请选择${cfg.heroes}名不同英雄`);
+      if(mode==='battle'){
+        const sx=side==='red'?1:5, hx=side==='red'?2:4;
+        for(let y=0;y<4;y++)s.units.push({id:`${side}-s${y}`,side,type:'soldier',name:`士兵 ${y+1}`,x:sx,y,alive:true});
+        s.units.push({id:`${side}-s4`,side,type:'soldier',name:'士兵 5',x:side==='red'?2:4,y:side==='red'?3:0,alive:true});
+        picks.forEach((h,i)=>s.units.push({id:`${side}-${h}`,side,type:'hero',hero:h,name:HEROES[h].name,x:hx,y:i,alive:true}));
+      }else{
+        for(let y=0;y<4;y++)s.units.push({id:`${side}-s${y}`,side,type:'soldier',name:`士兵 ${y+1}`,x:side==='red'?1:4,y,alive:true});
+        picks.forEach((h,i)=>s.units.push({id:`${side}-${h}`,side,type:'hero',hero:h,name:HEROES[h].name,x:side==='red'?0:5,y:i+1,alive:true}));
+      }
     }
     return s;
   }
@@ -43,7 +61,7 @@
         if(capture?target&&target.id!==u.id&&(target.side!==u.side||u.hero==='wolf'):!target)result.push({x:last.x,y:last.y,path:p.map(c=>({...c})),target:target?.id});
       }
       if(n>=Math.max(...lengths)||(n&&at(s,last.x,last.y)))return;
-      for(const [dx,dy] of DIRS){const next={x:last.x+dx,y:last.y+dy};if(inside(next.x,next.y)&&!p.some(c=>same(c,next)))walk([...p,next]);}
+      for(const [dx,dy] of DIRS){const next={x:last.x+dx,y:last.y+dy};if(insideState(s,next.x,next.y)&&!p.some(c=>same(c,next)))walk([...p,next]);}
     }
     walk([{x:u.x,y:u.y}]);
     return result.filter((r,i,all)=>all.findIndex(a=>a.x===r.x&&a.y===r.y)===i);
@@ -62,14 +80,14 @@
     const general=source(s,u,'general'), knight=source(s,u,'knight');
     if(!opening&&general&&ready(s,general)&&!trapped(s,u)&&(u.pushImmuneUntil??0)<=s.ply){
       for(const [dx,dy] of DIRS){const enemy=at(s,u.x+dx,u.y+dy),x=u.x+dx*2,y=u.y+dy*2;
-        if(enemy&&enemy.side!==u.side&&inside(x,y)&&!at(s,x,y))out.push(jump(u,enemy,'push',{x:enemy.x,y:enemy.y,source:general.id,target:enemy.id,destination:{x,y}}));
+        if(enemy&&enemy.side!==u.side&&insideState(s,x,y)&&!at(s,x,y))out.push(jump(u,enemy,'push',{x:enemy.x,y:enemy.y,source:general.id,target:enemy.id,destination:{x,y}}));
       }
     }
     if(knight&&ready(s,knight)&&!trapped(s,u))out.push(...paths(s,u,[2]).map(c=>({...c,kind:'speed',source:knight.id})));
     if(u.type!=='hero'||!ready(s,u))return out;
-    if(u.hero==='vanguard')for(const [dx,dy] of DIRS){const x=u.x+2*dx,y=u.y+2*dy;if(at(s,u.x+dx,u.y+dy)&&inside(x,y)&&!at(s,x,y))out.push(jump(u,{x,y},'vault',{source:u.id}));}
+    if(u.hero==='vanguard')for(const [dx,dy] of DIRS){const x=u.x+2*dx,y=u.y+2*dy;if(at(s,u.x+dx,u.y+dy)&&insideState(s,x,y)&&!at(s,x,y))out.push(jump(u,{x,y},'vault',{source:u.id}));}
     if(opening)return out;
-    if(u.hero==='assassin')out.push(...CELLS.filter(c=>!at(s,c.x,c.y)).map(c=>jump(u,c,'teleport',{source:u.id})));
+    if(u.hero==='assassin')out.push(...cellsOf(s).filter(c=>!at(s,c.x,c.y)).map(c=>jump(u,c,'teleport',{source:u.id})));
     if(u.hero==='mage'){
       const pool=s.units.filter(e=>e.alive&&Math.abs(e.x-u.x)<=1&&Math.abs(e.y-u.y)<=1&&(e.swapImmuneUntil??0)<=s.ply);
       pool.forEach((a,i)=>pool.slice(i+1).filter(b=>near(a,b)).forEach(b=>out.push({x:a.x,y:a.y,kind:'swap',a:a.id,b:b.id,source:u.id,path:[]})));
@@ -81,7 +99,7 @@
     const u=get(s,id);if(!u?.alive||s.winner)return [];
     if(s.phase==='dodge')return id===s.pending.target&&mode==='move'&&!trapped(s,u)?paths(s,u,[1]).map(c=>({...c,kind:'dodge'})):[];
     if(u.side!==s.side||(s.actor&&id!==s.actor))return [];
-    if(s.phase==='bomb')return mode==='skill'?CELLS.filter(c=>(c.x===u.x||c.y===u.y)&&Math.abs(c.x-u.x)+Math.abs(c.y-u.y)<=3).map(c=>jump(u,c,'bomb')):[];
+    if(s.phase==='bomb')return mode==='skill'?cellsOf(s).filter(c=>(c.x===u.x||c.y===u.y)&&Math.abs(c.x-u.x)+Math.abs(c.y-u.y)<=3).map(c=>jump(u,c,'bomb')):[];
     if(s.phase==='retreat')return mode==='move'&&!trapped(s,u)?paths(s,u,[1]).map(c=>({...c,kind:'retreat'})):[];
     if(s.phase==='combo'&&mode!=='attack')return [];
     if(mode==='attack')return attacks(s,u).map(c=>({...c,kind:'attack'}));
@@ -174,6 +192,6 @@
   }
   function hasActions(s){return s.units.filter(u=>u.alive&&u.side===s.side).some(u=>['move','attack','skill'].some(m=>legal(s,u.id,m).length));}
   function pass(s){if(s.phase!=='normal'||hasActions(s)||s.winner)throw Error('仍有合法行动，不能跳过');trackEndgame(s);emit(s,'无合法行动，交接行动权');finish(s);}
-  const api={HEROES,CELLS,DIRS,create,inside,at,get,near,trapped,legal,apply,decline,pass,hasActions,protectedOpening,ready,key,endgameInfo};
+  const api={HEROES,CELLS,MODES,DIRS,create,inside,insideState,cellsOf,at,get,near,trapped,legal,apply,decline,pass,hasActions,protectedOpening,ready,key,endgameInfo};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.Rules=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

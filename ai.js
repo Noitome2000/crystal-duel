@@ -42,7 +42,7 @@
       for(const u of s.units.filter(u=>u.alive&&u.side===team)){
         const sign=team===side?1:-1;
         const moves=R.legal(view,u.id,'move'),attacks=R.legal(view,u.id,'attack');
-        score+=sign*(value(u)+6*(3-Math.abs(u.x-2.5)-Math.abs(u.y-1.5))+moves.length*2-(R.trapped(s,u)?18:0));
+        const centerX=s.mode==='battle'?3:2.5;score+=sign*(value(u)+6*(3-Math.abs(u.x-centerX)-Math.abs(u.y-1.5))+moves.length*2-(R.trapped(s,u)?18:0));
         if(u.type==='soldier'){const providers=s.units.filter(e=>e.alive&&e.side===team&&R.near(e,u)&&R.ready(s,e)&&(e.hero==='knight'||e.hero==='general'&&!R.protectedOpening(s)));score+=sign*providers.length*7;}
         if(u.hero==='ranger'&&!R.trapped(s,u))score+=sign*Math.min(3,moves.length)*4;
         for(const a of attacks)if(R.get(s,a.target).side!==team)threatened[team].add(a.target);

@@ -16,13 +16,13 @@
         <fieldset id="trainingSettings">
           <div class="field-grid">
             <label>模拟局数<input id="games" type="number" min="1" max="10000" step="1" value="100" required></label>
-            <label>搜索强度<select id="difficulty"><option value="fast">快速评估 · 2 层 / 350 节点</option><option value="standard">标准对战 · 4 层 / 4500 节点</option></select></label>
+            <label>战场模式<select id="mode"><option value="classic">经典 · 2 英雄 / 4 士兵</option><option value="battle">大战场 · 3 英雄 / 5 士兵</option></select></label><label>搜索强度<select id="difficulty"><option value="fast">快速评估 · 2 层 / 350 节点</option><option value="standard">标准对战 · 4 层 / 4500 节点</option></select></label>
           </div>
           <label>先手安排<select id="first"><option value="alternate">交换先手 · 相邻两局保持同阵容</option><option value="random">每局随机先手</option><option value="red">固定赤方先手</option><option value="blue">固定靛方先手</option></select></label>
           <label>随机位置的选将方式<select id="randomMode"><option value="uniform">均匀随机 · 每位可选英雄等概率</option><option value="ai">现有 AI 选将 · 考虑搭配与对手</option></select></label>
           <p class="field-note">随机位置每局重新抽选；交换先手时每两局抽选一次。指定英雄保持固定。同阵营不重复，双方可同英雄。</p>
-          <div class="team-config red-team"><h3>赤方阵容</h3><div class="field-grid"><label>1 号位 · 上方<select id="redSlot1" data-hero-slot data-side="red" aria-label="赤方1号位"></select></label><label>2 号位 · 下方<select id="redSlot2" data-hero-slot data-side="red" aria-label="赤方2号位"></select></label></div></div>
-          <div class="team-config blue-team"><h3>靛方阵容</h3><div class="field-grid"><label>1 号位 · 上方<select id="blueSlot1" data-hero-slot data-side="blue" aria-label="靛方1号位"></select></label><label>2 号位 · 下方<select id="blueSlot2" data-hero-slot data-side="blue" aria-label="靛方2号位"></select></label></div></div>
+          <div class="team-config red-team"><h3>赤方阵容</h3><div class="field-grid"><label>1 号位<select id="redSlot1" data-hero-slot data-side="red" aria-label="赤方1号位"></select></label><label>2 号位<select id="redSlot2" data-hero-slot data-side="red" aria-label="赤方2号位"></select></label><label class="battle-slot">3 号位<select id="redSlot3" data-hero-slot data-side="red" aria-label="赤方3号位"></select></label></div></div>
+          <div class="team-config blue-team"><h3>靛方阵容</h3><div class="field-grid"><label>1 号位<select id="blueSlot1" data-hero-slot data-side="blue" aria-label="靛方1号位"></select></label><label>2 号位<select id="blueSlot2" data-hero-slot data-side="blue" aria-label="靛方2号位"></select></label><label class="battle-slot">3 号位<select id="blueSlot3" data-hero-slot data-side="blue" aria-label="靛方3号位"></select></label></div></div>
           <details class="advanced"><summary>更多设置</summary><div class="field-grid"><label>随机种子<input id="seed" type="number" min="0" max="4294967295" step="1" value="20260925" required></label><label>每局决策上限<input id="maxDecisions" type="number" min="20" max="10000" step="1" value="600" required></label></div><p class="field-note">用于比较同一批抽选阵容。搜索强度相同、设备耗时不同，行动仍可能有差异。大于三子的对局遇到决策上限或重复局面时记为未完成；三子残局继续执行正式检定。</p></details>
         </fieldset>
         <p id="formError" class="form-error" role="alert" hidden></p>
